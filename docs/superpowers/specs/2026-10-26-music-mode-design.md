@@ -408,6 +408,13 @@ owner's clips under `~/.config/amaran-mcp/clips`.
   prints the replay timeline and records section times typed by the owner or
   dictated to Claude. Public-dataset labels are converted to the same format
   (drop maps to climax, break to breakdown, build to build, the rest groove).
+- **Ship gate (Claude's call after the builder check).** The model ships if it
+  beats the rules on held-out public tracks (split by track) on frame accuracy
+  and on build and break boundaries within 2 s, and is no worse than the rules
+  on the owner's clips, which are reported separately: with a handful of
+  owner clips, one clip must not decide alone. SSME drop labels are points,
+  so drops are scored as release events within 2 s, not as segments; its
+  timed-comment fields are not used.
 - **Evaluation.** `tools/train_sections.py` trains, cross-validates by track,
   prints the rules baseline beside the model, and refuses to write the
   weights file if the model does not beat the rules on the held-out set.
