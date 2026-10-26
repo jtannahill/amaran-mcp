@@ -95,7 +95,9 @@ class HarmonyTracker:
 
     def _update(self, dt: float) -> tuple[bool, bool]:
         spectrum = np.abs(np.fft.rfft(self._buffer * self._window))[self._bins]
-        frame = np.bincount(self._pitch_class, weights=np.log1p(spectrum * 100), minlength=12)
+        # Linear magnitude: sustained notes dominate; log weighting let
+        # broadband noise (hats, risers) flatten the chroma.
+        frame = np.bincount(self._pitch_class, weights=spectrum, minlength=12)
         self._chroma += (frame - self._chroma) * (1 - math.exp(-dt / CHROMA_SMOOTHING))
         norm = np.linalg.norm(self._chroma)
         if norm <= 1e-9:

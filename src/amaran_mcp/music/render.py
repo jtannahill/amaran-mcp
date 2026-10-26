@@ -90,7 +90,7 @@ class Renderer:
 
     def step(self, f: Features, dt: float) -> Output:
         n = len(self.mood.anchors)
-        if f.drop:
+        if f.release:
             self.jump_to_anchor(self._drop_anchor())
         if self._hold > 0:
             self._hold = max(0.0, self._hold - dt)

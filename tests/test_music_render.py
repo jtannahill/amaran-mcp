@@ -1,21 +1,20 @@
-"""Renderer: slew limits, mood bounds, breakdowns and drops."""
+"""Renderer: slew limits, mood bounds, sections and releases."""
 
 import random
 
-from amaran_mcp.music.analysis import Features
 from amaran_mcp.music.moods import MOODS
 from amaran_mcp.music.render import Renderer
+from music_fixtures import make_features
 
 
-def features(energy=0.5, section="playing", drop=False):
-    return Features(energy=energy, bass=energy, is_music=True, section=section,
-                    drop=drop, digital_zero=False)
+def features(energy=0.5, section="groove", release=False):
+    return make_features(energy=energy, bass=energy, section=section, release=release)
 
 
 LOUD = features(1.0)
 QUIET = features(0.1)
 BREAKDOWN = features(0.4, section="breakdown")
-DROP = features(1.0, drop=True)
+DROP = features(1.0, release=True)
 
 
 
@@ -33,9 +32,8 @@ def test_slew_limits_hold_under_chaotic_input():
     rng = random.Random(1)
     outs = []
     for _ in range(8 * 120):
-        f = Features(energy=rng.random(), bass=rng.random(), is_music=True,
-                     section=rng.choice(["playing", "breakdown"]), drop=rng.random() < 0.02,
-                     digital_zero=False)
+        f = make_features(energy=rng.random(), bass=rng.random(),
+                          section=rng.choice(["groove", "breakdown"]), release=rng.random() < 0.02)
         outs.append(r.step(f, 1 / 8))
     for a, b in zip(outs, outs[1:]):
         assert abs(b.brightness - a.brightness) <= 12 / 8 + 1e-9

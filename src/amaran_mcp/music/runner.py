@@ -27,7 +27,7 @@ from ..config import CONFIG_DIR, _write_private
 from ..desktop import DesktopError
 from ..light import LightBase, LightState
 from ..link import LinkError
-from .analysis import Analyzer, Features
+from .analysis import Analyzer, Features, merge_events
 from .applemusic import Track, anchor_for, now_playing
 from .capture import CaptureError, Source, open_source
 from .moods import MOODS, Mood
@@ -138,7 +138,7 @@ class _Run:
         self._listening_since = 0.0
         self._zero_since: float | None = None
         self._next = {"tick": 0.0, "music": 0.0, "control": 0.0, "status": 0.0}
-        self._drop = False
+        self._pending: Features | None = None  # features since the last tick, events merged
         self.writer: _Writer | None = None
 
     # ── Status ───────────────────────────────────────────────────────────────
@@ -240,8 +240,7 @@ class _Run:
                 self._plan_settle(self.renderer._out)
                 self.write_status()
             elif f.is_music:
-                out = self.renderer.step(replace(f, drop=self._drop), dt)
-                self._drop = False
+                out = self.renderer.step(f, dt)
                 self.writer.post(("color", out.hue, out.saturation, out.brightness))
         elif self.state == "listening" and f.is_music and f.section != "silence" and not self.stop.is_set():
             self._plan_fade_in()
@@ -261,7 +260,7 @@ class _Run:
         try:
             async for block in self.source.blocks():
                 f = self.analyzer.feed(block)
-                self._drop = self._drop or f.drop
+                self._pending = f if self._pending is None else merge_events(self._pending, f)
                 self.now += len(block) / self.source.rate
 
                 if self.now >= self._next["music"]:
@@ -285,7 +284,8 @@ class _Run:
                 if self.now >= self._next["tick"]:
                     dt = self._tick_seconds()
                     self._next["tick"] = self.now + dt
-                    self.tick(f, dt)
+                    self.tick(self._pending, dt)
+                    self._pending = None
 
                 if self.state == "listening" and not self._fade:
                     if self.stop.is_set():

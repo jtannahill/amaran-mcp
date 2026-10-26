@@ -177,3 +177,59 @@ def speech_over(rate: int, seconds: float, bed: np.ndarray) -> np.ndarray:
     voice = speech_like(rate, seconds)
     n = min(len(voice), len(bed))
     return (bed[:n] + voice[:n]).astype(np.float32)
+
+
+def hats_and_pads(rate: int, seconds: float, bpm: float = 125) -> np.ndarray:
+    """An intro: off-beat hats over pads, no kick yet."""
+
+    rng = np.random.default_rng(RNG_SEED)
+    out = _pads(rate, seconds).astype(np.float64)
+    beat = int(rate * 60 / bpm)
+    hat_len = int(rate * 0.04)
+    hat = 0.08 * rng.standard_normal(hat_len) * np.exp(-np.arange(hat_len) / rate * 80)
+    for start in range(beat // 2, len(out), beat):
+        end = min(start + hat_len, len(out))
+        out[start:end] += hat[: end - start]
+    return out.astype(np.float32)
+
+
+def arrangement(rate: int) -> tuple[np.ndarray, dict[str, tuple[float, float]]]:
+    """A trance track in miniature, with where each section is."""
+
+    parts = [
+        ("silence", silence(rate, 2)),
+        ("intro", hats_and_pads(rate, 16)),
+        ("groove", kick_track(rate, 30)),
+        ("breakdown", progression(rate, [("A", True), ("F", False), ("C", False), ("G", False)], 10.0)),
+        ("build", riser(rate, 16) + progression(rate, [("A", True)], 16.0)),
+        ("climax", kick_track(rate, 30) * 1.3),
+        ("groove2", kick_track(rate, 10)),
+    ]
+    marks, t = {}, 0.0
+    for name, samples in parts:
+        marks[name] = (t, t + len(samples) / rate)
+        t += len(samples) / rate
+    return np.concatenate([p for _, p in parts]).astype(np.float32), marks
+
+
+def make_features(**fields):
+    """Features for renderer and runner tests, with quiet defaults."""
+
+    from amaran_mcp.music.analysis import Features
+    from amaran_mcp.music.harmony import Harmony
+    from amaran_mcp.music.tempo import Beat
+    from amaran_mcp.music.timbre import Timbre
+
+    beat = Beat(fields.pop("bpm", None), fields.pop("confidence", 0.0), fields.pop("bar", False),
+                fields.pop("phrase", False), fields.pop("seconds_to_bar", None),
+                fields.pop("seconds_to_phrase", None))
+    root = fields.pop("chord_root", None)
+    major = fields.pop("major", None if root is None else fields.get("balance", 0) >= 0)
+    harmony = Harmony(None if root is None else "x", root, major, 0.9 if root is not None else 0.0,
+                      fields.pop("balance", 0.0), fields.pop("change", False), fields.pop("lift", False))
+    timbre = Timbre(fields.pop("vocal", 0.0), fields.pop("tension", 0.0), fields.pop("openness", 0.5),
+                    fields.pop("level_db", -20.0))
+    base = dict(energy=0.5, bass=0.5, is_music=True, digital_zero=False, section="groove",
+                section_seconds=10.0, release=False, bloom=False)
+    base.update(fields)
+    return Features(beat=beat, harmony=harmony, timbre=timbre, **base)
