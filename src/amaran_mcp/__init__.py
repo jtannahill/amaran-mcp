@@ -9,7 +9,7 @@
   amaran-mcp color HUE [SAT] [PCT]
   amaran-mcp effect NAME [PCT] | effect off
   amaran-mcp music-probe [SECONDS]              print the level of what this Mac is playing
-  amaran-mcp music [--mood NAME]                run music mode in the foreground
+  amaran-mcp music [--mood NAME] [--log-features PATH]   run music mode in the foreground
   amaran-mcp music-stop                         stop a background music mode
   amaran-mcp music-record SECONDS NAME          record a tuning clip of what this Mac plays
   amaran-mcp music-replay PATH                  replay a clip through the analysis
@@ -139,6 +139,7 @@ def main() -> None:
     parser.add_argument("--country", default="US", help="account country code (import --account)")
     parser.add_argument("--name", help="which light to import, if there are several")
     parser.add_argument("--mood", default="ethereal", help="music mode mood: ethereal, deep or dawn")
+    parser.add_argument("--log-features", type=Path, help="music: write one JSON line per tick here")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.verbose:
@@ -154,7 +155,7 @@ def main() -> None:
             _import(args)
         elif args.command == "music":
             from .music.runner import RunnerConfig, run
-            raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood))))
+            raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood, log_features=args.log_features))))
         elif args.command == "music-record":
             from .music import clips
             seconds, name = float(args.values[0]), (args.values[1] if len(args.values) > 1 else "clip")

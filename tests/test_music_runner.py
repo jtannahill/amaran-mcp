@@ -68,6 +68,7 @@ def test_plays_then_settles_back_to_start_state(runner):
     assert any(c[0] == "set_color" for c in light.calls)
     assert light.calls[-1] == ("apply", light.start)
     assert status(runner)["state"] in ("listening", "settling")
+    assert {"section", "chord"} <= status(runner).keys()
 
 
 def test_no_hard_cut_into_music(runner):
@@ -126,3 +127,13 @@ def test_brightness_offset_from_control_file(runner):
                            light=lambda: light, music=lambda: None))
     colors = [c for c in light.calls if c[0] == "set_color"]
     assert colors and all(c[3] >= 40 - 1e-9 for c in colors)
+
+
+def test_feature_log_writes_one_line_per_tick(runner, tmp_path):
+    log = tmp_path / "features.jsonl"
+    asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=5, log_features=log),
+                           source=FakeSource([kick_track(RATE, 10), silence(RATE, 20)]),
+                           light=lambda: FakeLight(), music=lambda: None))
+    rows = [json.loads(line) for line in log.read_text().splitlines()]
+    assert len(rows) > 50 and {"t", "section", "output"} <= rows[0].keys()
+    assert any(row["output"] for row in rows)

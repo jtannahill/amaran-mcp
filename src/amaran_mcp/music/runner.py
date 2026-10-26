@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import json
 import logging
 import os
+from pathlib import Path
 import signal
 import sys
 from typing import Any
@@ -57,6 +58,7 @@ class RunnerConfig:
     silence_exit_seconds: float = 15 * 60
     settle_seconds: float = 5.0
     music_poll_seconds: float = 3.0
+    log_features: Path | None = None  # one JSON line per tick, for tuning
 
 
 class _Writer:
@@ -140,6 +142,9 @@ class _Run:
         self._next = {"tick": 0.0, "music": 0.0, "control": 0.0, "status": 0.0}
         self._pending: Features | None = None  # features since the last tick, events merged
         self.writer: _Writer | None = None
+        self._posted: tuple | None = None
+        self._latest: Features | None = None  # for the status file
+        self._log = open(config.log_features, "a") if config.log_features else None
 
     # ── Status ───────────────────────────────────────────────────────────────
 
@@ -154,6 +159,8 @@ class _Run:
             "backend": lamp_backend,
             "started_at": self.started_at,
             "message": self.message,
+            "section": self._latest.section if self._latest else None,
+            "chord": self._latest.harmony.chord if self._latest else None,
         })
 
     def note_error(self, message: str) -> None:
@@ -226,9 +233,19 @@ class _Run:
         elif track:
             self.track = track
 
+    def _post(self, command: tuple) -> None:
+        self._posted = command
+        self.writer.post(command)
+
+    def _log_tick(self, f: Features) -> None:
+        if not self._log:
+            return
+        row = {"t": round(self.now, 3), "state": self.state, "output": self._posted, **asdict(f)}
+        self._log.write(json.dumps(row, default=str) + "\n")
+
     def tick(self, f: Features, dt: float) -> None:
         if self._fade:
-            self.writer.post(self._fade.pop(0))
+            self._post(self._fade.pop(0))
             if not self._fade and self._after_fade:
                 self.state, self._after_fade = self._after_fade, None
                 if self.state == "listening":
@@ -241,7 +258,7 @@ class _Run:
                 self.write_status()
             elif f.is_music:
                 out = self.renderer.step(f, dt)
-                self.writer.post(("color", out.hue, out.saturation, out.brightness))
+                self._post(("color", out.hue, out.saturation, out.brightness))
         elif self.state == "listening" and f.is_music and f.section != "silence" and not self.stop.is_set():
             self._plan_fade_in()
             self.write_status()
@@ -261,6 +278,7 @@ class _Run:
             async for block in self.source.blocks():
                 f = self.analyzer.feed(block)
                 self._pending = f if self._pending is None else merge_events(self._pending, f)
+                self._latest = f
                 self.now += len(block) / self.source.rate
 
                 if self.now >= self._next["music"]:
@@ -284,7 +302,9 @@ class _Run:
                 if self.now >= self._next["tick"]:
                     dt = self._tick_seconds()
                     self._next["tick"] = self.now + dt
+                    self._posted = None
                     self.tick(self._pending, dt)
+                    self._log_tick(self._pending)
                     self._pending = None
 
                 if self.state == "listening" and not self._fade:
@@ -307,6 +327,8 @@ class _Run:
                 self.state = "listening"
             self.write_status()
             await self.source.close()
+            if self._log:
+                self._log.close()
         return 0
 
 
