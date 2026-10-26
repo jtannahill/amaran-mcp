@@ -69,3 +69,12 @@ def test_drop_reaches_next_anchor_within_three_seconds():
 def test_brightness_offset_shifts_range():
     r = Renderer(MOODS["ethereal"], brightness_offset=15)
     assert all(40 - 1e-9 <= o.brightness <= 85 + 1e-9 for o in run(r, LOUD, 30))
+
+
+def test_drop_skips_pale_anchors():
+    """A drop lands on a colour, never on the misty white stop."""
+    r = Renderer(MOODS["ethereal"], start_anchor=2)  # soft teal; next stop is misty white
+    run(r, LOUD, 1)
+    assert r.current_target_hue_after_drop() == MOODS["ethereal"].anchors[0][0]
+    outs = [r.step(DROP, 1 / 8)] + run(r, LOUD, 4)
+    assert outs[-1].saturation >= 40

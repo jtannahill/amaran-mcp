@@ -19,6 +19,7 @@ SATURATION_RATE = 20.0
 BRIGHTNESS_RATE = 12.0
 
 BREAKDOWN_SATURATION = 25.0
+PALE_ANCHOR = 30.0  # stops below this saturation are for drifting, not for drops
 DROP_HOLD = 3.0  # seconds the drift pauses while a drop crossfades in
 ENERGY_DRIFT_BOOST = 0.3  # up to 30% faster drift at full energy
 BRIGHTNESS_LIMITS = (10.0, 100.0)  # where a shifted range is clamped
@@ -62,9 +63,19 @@ class Renderer:
         (h1, s1), (h2, s2) = self.mood.anchors[i], self.mood.anchors[(i + 1) % n]
         return (h1 + _arc(h1, h2) * frac) % 360, s1 + (s2 - s1) * frac
 
-    def current_target_hue_after_drop(self) -> float:
+    def _drop_anchor(self) -> int:
+        """The next stop with real colour: a drop should never land on white."""
+
         n = len(self.mood.anchors)
-        return self.mood.anchors[(int(math.floor(self._position)) + 1) % n][0] % 360
+        here = int(math.floor(self._position))
+        for step in range(1, n + 1):
+            index = (here + step) % n
+            if self.mood.anchors[index][1] >= PALE_ANCHOR:
+                return index
+        return (here + 1) % n
+
+    def current_target_hue_after_drop(self) -> float:
+        return self.mood.anchors[self._drop_anchor()][0] % 360
 
     def begin(self, output: Output) -> None:
         """Start slewing from what the light shows now, instead of the floor."""
@@ -80,7 +91,7 @@ class Renderer:
     def step(self, f: Features, dt: float) -> Output:
         n = len(self.mood.anchors)
         if f.drop:
-            self.jump_to_anchor(int(math.floor(self._position)) + 1)
+            self.jump_to_anchor(self._drop_anchor())
         if self._hold > 0:
             self._hold = max(0.0, self._hold - dt)
         else:
