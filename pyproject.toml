@@ -1,0 +1,27 @@
+[project]
+name = "amaran-mcp"
+version = "0.1.0"
+description = "MCP server and CLI that control an amaran light over Bluetooth Mesh"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "jtannahill", email = "161522526+jtannahill@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "bleak>=3.0.2",
+    "cryptography>=50.0.2",
+    "mcp>=1.2",
+]
+
+[project.scripts]
+amaran-mcp = "amaran_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
