@@ -66,6 +66,11 @@ class Renderer:
         n = len(self.mood.anchors)
         return self.mood.anchors[(int(math.floor(self._position)) + 1) % n][0] % 360
 
+    def begin(self, output: Output) -> None:
+        """Start slewing from what the light shows now, instead of the floor."""
+
+        self._out = Output(output.hue % 360, output.saturation, output.brightness)
+
     def jump_to_anchor(self, index: int) -> None:
         """Crossfade to a palette stop, e.g. when a new track starts."""
 

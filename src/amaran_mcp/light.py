@@ -131,16 +131,20 @@ class LightBase:
         scenes = load_scenes()
         if name not in scenes:
             raise ValueError(f"No scene called {name!r}. Saved scenes: {', '.join(scenes) or 'none'}")
-        scene = LightState(**scenes[name])
-        if scene.power is False:
-            await self.set_power(False)
-        elif scene.mode == "white" and scene.kelvin is not None:
-            await self.set_white(scene.kelvin, scene.brightness, scene.tint or 0)
-        elif scene.mode == "color" and scene.hue is not None:
-            await self.set_color(scene.hue, scene.saturation or 100, scene.brightness)
-        elif scene.mode == "effect" and scene.effect:
-            await self.set_effect(scene.effect, scene.brightness)
+        await self.apply(LightState(**scenes[name]))
         return scenes[name]
+
+    async def apply(self, state: LightState) -> None:
+        """Put the light into a remembered state: off, or a white, colour or effect."""
+
+        if state.power is False:
+            await self.set_power(False)
+        elif state.mode == "white" and state.kelvin is not None:
+            await self.set_white(state.kelvin, state.brightness, state.tint or 0)
+        elif state.mode == "color" and state.hue is not None:
+            await self.set_color(state.hue, state.saturation or 100, state.brightness)
+        elif state.mode == "effect" and state.effect:
+            await self.set_effect(state.effect, state.brightness)
 
 
 class AmaranLight(LightBase):

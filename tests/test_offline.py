@@ -172,3 +172,23 @@ def test_desktop_backend_against_fake_desktop(home, monkeypatch):
     assert set_cct["args"] == {"cct": 5600, "intensity": 400, "gm": 70}
     effect = next(m for m in seen if m["action"] == "set_system_effect")
     assert effect["args"] == {"effect_type": "fault_bulb", "intensity": 200}
+
+
+def test_apply_restores_white_and_power_off():
+    from amaran_mcp.light import LightBase, LightState
+
+    class Stub(LightBase):
+        def __init__(self):
+            self.calls = []
+        async def set_power(self, on):
+            self.calls.append(("power", on))
+        async def set_white(self, kelvin, brightness=None, tint=0):
+            self.calls.append(("white", kelvin, brightness, tint))
+        async def set_color(self, hue, saturation, brightness=None):
+            self.calls.append(("color", hue, saturation, brightness))
+
+    stub = Stub()
+    asyncio.run(stub.apply(LightState(True, "white", 80, 5400, 2)))
+    asyncio.run(stub.apply(LightState(False, "color", 30, hue=200, saturation=50)))
+    asyncio.run(stub.apply(LightState(True, "color", 30, hue=200, saturation=50)))
+    assert stub.calls == [("white", 5400, 80, 2), ("power", False), ("color", 200, 50, 30)]
