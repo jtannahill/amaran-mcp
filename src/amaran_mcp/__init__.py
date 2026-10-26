@@ -8,6 +8,7 @@
   amaran-mcp white KELVIN [PCT] [TINT]
   amaran-mcp color HUE [SAT] [PCT]
   amaran-mcp effect NAME [PCT] | effect off
+  amaran-mcp music-probe [SECONDS]              print the level of what this Mac is playing
 """
 
 from __future__ import annotations
@@ -38,6 +39,34 @@ def _import(args: argparse.Namespace) -> None:
         raise SystemExit(f"Found {len(fixtures)} lights ({names}); pick one with --name")
     light = import_light(fixtures[0])
     print(f"Imported {light.name} ({light.model}, mesh address {light.node_address}) to {LIGHT_PATH}")
+
+
+def _music_probe(seconds: float) -> None:
+    """Print one line per second: level of the system audio the helper hears."""
+
+    from array import array
+    import math
+    import subprocess
+
+    from .music.capture import CaptureError, helper_path
+
+    helper = subprocess.Popen([str(helper_path())], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        header = helper.stdout.readline().decode().split()
+        if len(header) != 2 or header[0] != "RATE":
+            raise CaptureError(helper.stderr.read().decode().strip() or "the audio helper did not start")
+        rate = int(header[1])
+        print(f"listening at {rate} Hz")
+        for second in range(int(seconds)):
+            samples = array("f")
+            samples.frombytes(helper.stdout.read(rate * 4))
+            peak = max((abs(v) for v in samples), default=0.0)
+            rms = math.sqrt(sum(v * v for v in samples) / max(len(samples), 1))
+            level = 20 * math.log10(rms) if rms > 0 else float("-inf")
+            print(f"{second + 1:3d}s  rms {level:7.1f} dBFS  peak {peak:.3f}")
+    finally:
+        helper.terminate()
+        helper.wait(timeout=5)
 
 
 async def _run(args: argparse.Namespace) -> None:
@@ -76,7 +105,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="amaran-mcp", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["import", "serve", "status", "on", "off",
-                                            "brightness", "white", "color", "effect"])
+                                            "brightness", "white", "color", "effect",
+                                            "music-probe"])
     parser.add_argument("values", nargs="*")
     parser.add_argument("--db", type=Path, help="amaran Desktop amaran.db (import)")
     parser.add_argument("--account", help="amaran account email or phone (import from the account)")
@@ -90,14 +120,17 @@ def main() -> None:
     from .config import ConfigError
     from .desktop import DesktopError
     from .link import LinkError
+    from .music.capture import CaptureError
 
     try:
         if args.command == "import":
             _import(args)
+        elif args.command == "music-probe":
+            _music_probe(float(args.values[0]) if args.values else 10)
         elif args.command == "serve":
             from .server import mcp
             mcp.run()
         else:
             asyncio.run(_run(args))
-    except (ConfigError, DesktopError, LinkError, ValueError) as err:
+    except (CaptureError, ConfigError, DesktopError, LinkError, ValueError) as err:
         raise SystemExit(f"error: {err}") from None

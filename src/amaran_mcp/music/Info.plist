@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.jtannahill.amaran-systemtap</string>
+	<key>CFBundleName</key>
+	<string>amaran-systemtap</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>amaran-mcp listens to what this Mac is playing to move your light with the music.</string>
+</dict>
+</plist>
