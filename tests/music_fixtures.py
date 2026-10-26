@@ -146,3 +146,34 @@ def riser(rate: int, seconds: float) -> np.ndarray:
         pos += gap
         gap = max(0.06, gap * 0.93)
     return out.astype(np.float32)
+
+
+def sung(rate: int, seconds: float, notes: list[float]) -> np.ndarray:
+    """A sung "ah": harmonics shaped by vowel formants, 5.5 Hz vibrato, sustained
+    notes with short glides between them (female range in the tests)."""
+
+    n = int(rate * seconds)
+    t = np.arange(n) / rate
+    each = seconds / len(notes)
+    index = np.minimum((t // each).astype(int), len(notes) - 1)
+    target = np.log(np.array(notes))[index]
+    glide = int(rate * 0.12)
+    log_f0 = np.convolve(target, np.ones(glide) / glide, mode="same")  # short glides
+    log_f0[: glide // 2] = target[: glide // 2]
+    f0 = np.exp(log_f0) * (1 + 0.03 * np.sin(2 * np.pi * 5.5 * t))  # vibrato, about 50 cents
+    phase = 2 * np.pi * np.cumsum(f0) / rate
+    formants = ((800, 1.0, 120), (1200, 0.6, 150), (2500, 0.3, 250))
+    out = np.zeros(n)
+    for h in range(1, 13):
+        freq = h * f0
+        gain = sum(g * np.exp(-0.5 * ((freq - c) / w) ** 2) for c, g, w in formants) + 0.02
+        out += gain * np.sin(h * phase) / h ** 0.5
+    note_pos = (t % each) / each
+    shape = np.minimum(1, np.minimum(note_pos / 0.08, (1 - note_pos) / 0.08))
+    return (0.05 * out * shape).astype(np.float32)
+
+
+def speech_over(rate: int, seconds: float, bed: np.ndarray) -> np.ndarray:
+    voice = speech_like(rate, seconds)
+    n = min(len(voice), len(bed))
+    return (bed[:n] + voice[:n]).astype(np.float32)
