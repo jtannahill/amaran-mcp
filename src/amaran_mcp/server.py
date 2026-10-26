@@ -13,18 +13,10 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from .config import ConfigError, load_light, load_scenes
-from .light import AmaranLight
+from .backends import close_all, current_light as light
+from .config import ConfigError, load_scenes
+from .desktop import DesktopError
 from .link import LinkError
-
-_light: AmaranLight | None = None
-
-
-def light() -> AmaranLight:
-    global _light
-    if _light is None:
-        _light = AmaranLight(load_light())
-    return _light
 
 
 @asynccontextmanager
@@ -32,15 +24,14 @@ async def lifespan(_server: MCPServer) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        if _light:
-            await _light.close()
+        await close_all()
 
 
 mcp = MCPServer(
     "amaran",
     instructions=(
-        "Controls the user's amaran light over Bluetooth from this Mac. Each call "
-        "takes about a second, longer if the light has to be found first. "
+        "Controls the user's amaran light from this Mac, through amaran Desktop when "
+        "it is running, otherwise over Bluetooth directly. "
         "Brightness is a percentage. If brightness is left out, the light keeps "
         "its current brightness. Commands wake the light if it is off."
     ),
@@ -57,7 +48,7 @@ def tool(**options: Any):
         async def run(*args: Any, **kwargs: Any) -> Any:
             try:
                 return await fn(*args, **kwargs)
-            except (ConfigError, LinkError, ValueError) as err:
+            except (ConfigError, DesktopError, LinkError, ValueError) as err:
                 raise ToolError(str(err)) from err
 
         return mcp.tool(**options)(run)

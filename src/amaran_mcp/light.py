@@ -1,7 +1,9 @@
 """What the light can do, in percent, kelvin and degrees.
 
-Remembers the last state it set or read, so a colour change keeps the current
-brightness and a command to a light that is off wakes it first.
+LightBase holds what both backends share: the remembered state (so a colour
+change keeps the current brightness), range checks and scenes. AmaranLight
+talks to the light directly over Bluetooth Mesh; desktop.DesktopLight goes
+through amaran Desktop's local API.
 """
 
 from __future__ import annotations
@@ -21,6 +23,9 @@ log = logging.getLogger(__name__)
 EFFECT_NAMES = {flag: name for name, (flag, *_rest) in EFFECTS.items()}
 
 DEFAULT_BRIGHTNESS = 50
+
+# The two backends spell one effect differently.
+EFFECT_ALIASES = {"faulty_bulb": "fault_bulb", "fault_bulb": "faulty_bulb"}
 
 
 @dataclass
@@ -57,9 +62,95 @@ def _cct_tint(payload: bytes) -> int:
     return max(-10, min(10, ((low >> 45) & 0x7F) - 10))
 
 
-class AmaranLight:
+class LightBase:
+    name: str
+    model: str
+    caps: Capabilities
+    state: LightState
+
+    def _brightness(self, requested: float | None) -> float:
+        if requested is not None:
+            return max(0.0, min(100.0, requested))
+        return self.state.brightness if self.state.brightness is not None else DEFAULT_BRIGHTNESS
+
+    def _check_white(self, kelvin: int, tint: int) -> None:
+        if not self.caps.cct:
+            raise ValueError(f"{self.model} has no white (colour temperature) mode")
+        if not self.caps.kelvin_min <= kelvin <= self.caps.kelvin_max:
+            raise ValueError(
+                f"{self.model} does colour temperature from {self.caps.kelvin_min}K "
+                f"to {self.caps.kelvin_max}K, not {kelvin}K"
+            )
+        if tint and not self.caps.tint:
+            raise ValueError(f"{self.model} has no green/magenta tint control")
+
+    def _check_color(self) -> None:
+        if not self.caps.hsi:
+            raise ValueError(f"{self.model} has no colour mode")
+
+    def _check_effect(self, effect: str) -> str:
+        """Return the effect name this backend uses, or explain what exists."""
+
+        for candidate in (effect, EFFECT_ALIASES.get(effect)):
+            if candidate in self.caps.effects:
+                return candidate
+        raise ValueError(f"{self.model} effects are: {', '.join(self.caps.effects) or 'none'}")
+
+    def _status(self) -> dict[str, Any]:
+        # Only the fields for the current mode; the others are kept for stop_effect.
+        hidden = {"white": {"hue", "saturation", "effect"},
+                  "color": {"kelvin", "tint", "effect"},
+                  "effect": {"kelvin", "tint", "hue", "saturation"}}.get(self.state.mode or "", set())
+        return {k: v for k, v in asdict(self.state).items() if v is not None and k not in hidden}
+
+    async def _restore_steady(self, previous: LightState) -> None:
+        """Go back to the last steady white or colour, e.g. after an effect."""
+
+        self.state = LightState(power=previous.power, brightness=previous.brightness)
+        if previous.kelvin is not None:
+            await self.set_white(previous.kelvin, previous.brightness, previous.tint or 0)
+        elif previous.hue is not None:
+            await self.set_color(previous.hue, previous.saturation or 100, previous.brightness)
+
+    async def set_power(self, on: bool) -> None: ...
+    async def set_white(self, kelvin: int, brightness: float | None = None, tint: int = 0) -> None: ...
+    async def set_color(self, hue: float, saturation: float, brightness: float | None = None) -> None: ...
+    async def set_effect(self, effect: str, brightness: float | None = None) -> None: ...
+
+    # ── Scenes ───────────────────────────────────────────────────────────────
+
+    def save_scene(self, name: str) -> dict[str, Any]:
+        if self.state.mode is None:
+            raise ValueError("Nothing to save yet: set the light or read its status first")
+        scenes = load_scenes()
+        scenes[name] = {k: v for k, v in asdict(self.state).items() if v is not None}
+        save_scenes(scenes)
+        return scenes[name]
+
+    async def recall_scene(self, name: str) -> dict[str, Any]:
+        scenes = load_scenes()
+        if name not in scenes:
+            raise ValueError(f"No scene called {name!r}. Saved scenes: {', '.join(scenes) or 'none'}")
+        scene = LightState(**scenes[name])
+        if scene.power is False:
+            await self.set_power(False)
+        elif scene.mode == "white" and scene.kelvin is not None:
+            await self.set_white(scene.kelvin, scene.brightness, scene.tint or 0)
+        elif scene.mode == "color" and scene.hue is not None:
+            await self.set_color(scene.hue, scene.saturation or 100, scene.brightness)
+        elif scene.mode == "effect" and scene.effect:
+            await self.set_effect(scene.effect, scene.brightness)
+        return scenes[name]
+
+
+class AmaranLight(LightBase):
+    """Direct Bluetooth Mesh control; the Mac holds the light's one connection."""
+
+    backend = "bluetooth"
+
     def __init__(self, light: Light, store: StateStore | None = None) -> None:
         self.light = light
+        self.name, self.model = light.name, light.model
         self.caps: Capabilities = capabilities(light)
         self.link = MeshLink(light, store or StateStore())
         self.state = LightState()
@@ -80,15 +171,12 @@ class AmaranLight:
             protocol.power_status_request_payload(),
             lambda m: m.sidus_power_info,
         )
-        # Only the fields for the current mode; the others are kept for stop_effect.
-        hidden = {"white": {"hue", "saturation", "effect"},
-                  "color": {"kelvin", "tint", "effect"},
-                  "effect": {"kelvin", "tint", "hue", "saturation"}}.get(self.state.mode or "", set())
         result: dict[str, Any] = {
-            "light": self.light.name,
-            "model": self.light.model,
+            "light": self.name,
+            "model": self.model,
+            "backend": self.backend,
             "confirmed_by_light": confirmed,
-            **{k: v for k, v in asdict(self.state).items() if v is not None and k not in hidden},
+            **self._status(),
         }
         if power:
             result["battery_percent"] = power.battery_percentage
@@ -139,32 +227,20 @@ class AmaranLight:
         self.state.brightness = round(percent)
 
     async def set_white(self, kelvin: int, brightness: float | None = None, tint: int = 0) -> None:
-        if not self.caps.cct:
-            raise ValueError(f"{self.light.model} has no white (colour temperature) mode")
-        if not self.caps.kelvin_min <= kelvin <= self.caps.kelvin_max:
-            raise ValueError(
-                f"{self.light.model} does colour temperature from {self.caps.kelvin_min}K "
-                f"to {self.caps.kelvin_max}K, not {kelvin}K"
-            )
-        if tint and not self.caps.tint:
-            raise ValueError(f"{self.light.model} has no green/magenta tint control")
+        self._check_white(kelvin, tint)
         percent = self._brightness(brightness)
         await self._send([protocol.cct_payload(intensity=_intensity(percent), kelvin=kelvin, gm=tint)])
         self.state = LightState(True, "white", round(percent), kelvin, tint)
 
     async def set_color(self, hue: float, saturation: float, brightness: float | None = None) -> None:
-        if not self.caps.hsi:
-            raise ValueError(f"{self.light.model} has no colour mode")
+        self._check_color()
         percent = self._brightness(brightness)
         hue, saturation = round(hue) % 360, round(max(0.0, min(100.0, saturation)))
         await self._send([protocol.hsi_payload(hue=hue, saturation=saturation, intensity=_intensity(percent))])
         self.state = LightState(True, "color", round(percent), hue=hue, saturation=saturation)
 
     async def set_effect(self, effect: str, brightness: float | None = None) -> None:
-        if effect not in self.caps.effects:
-            raise ValueError(
-                f"{self.light.model} effects are: {', '.join(self.caps.effects) or 'none'}"
-            )
+        effect = self._check_effect(effect)
         percent = self._brightness(brightness)
         await self._send(_effect_payloads(EFFECT_NAMES[effect], percent))
         self.state.mode, self.state.effect, self.state.brightness = "effect", effect, round(percent)
@@ -175,41 +251,7 @@ class AmaranLight:
         previous = self.state
         if previous.power is not False:
             await self.link.send(_effect_payloads("off"))
-        self.state = LightState(power=previous.power, brightness=previous.brightness)
-        if previous.kelvin is not None:
-            await self.set_white(previous.kelvin, previous.brightness, previous.tint or 0)
-        elif previous.hue is not None:
-            await self.set_color(previous.hue, previous.saturation or 100, previous.brightness)
-
-    def _brightness(self, requested: float | None) -> float:
-        if requested is not None:
-            return max(0.0, min(100.0, requested))
-        return self.state.brightness if self.state.brightness is not None else DEFAULT_BRIGHTNESS
-
-    # ── Scenes ───────────────────────────────────────────────────────────────
-
-    def save_scene(self, name: str) -> dict[str, Any]:
-        if self.state.mode is None:
-            raise ValueError("Nothing to save yet: set the light or read its status first")
-        scenes = load_scenes()
-        scenes[name] = {k: v for k, v in asdict(self.state).items() if v is not None}
-        save_scenes(scenes)
-        return scenes[name]
-
-    async def recall_scene(self, name: str) -> dict[str, Any]:
-        scenes = load_scenes()
-        if name not in scenes:
-            raise ValueError(f"No scene called {name!r}. Saved scenes: {', '.join(scenes) or 'none'}")
-        scene = LightState(**scenes[name])
-        if scene.power is False:
-            await self.set_power(False)
-        elif scene.mode == "white" and scene.kelvin is not None:
-            await self.set_white(scene.kelvin, scene.brightness, scene.tint or 0)
-        elif scene.mode == "color" and scene.hue is not None:
-            await self.set_color(scene.hue, scene.saturation or 100, scene.brightness)
-        elif scene.mode == "effect" and scene.effect:
-            await self.set_effect(scene.effect, scene.brightness)
-        return scenes[name]
+        await self._restore_steady(previous)
 
     async def close(self) -> None:
         await self.link.close()

@@ -126,3 +126,49 @@ def test_import_from_desktop_db(home, tmp_path):
     assert (config.LIGHT_PATH.stat().st_mode & 0o777) == 0o600
     # Re-importing the same network keeps our address (and so our counter).
     assert config.import_light(fixtures[0]).source_address == light.source_address
+
+
+def test_desktop_backend_against_fake_desktop(home, monkeypatch):
+    """Message shape, node matching and tint scale, against a stand-in Desktop."""
+    _, config = home
+    import websockets
+    from amaran_mcp import desktop
+
+    seen = []
+
+    async def fake_desktop(ws):
+        async for raw in ws:
+            msg = json.loads(raw)
+            seen.append(msg)
+            assert msg["version"] == 2 and msg["token"]
+            data = {
+                "get_fixture_list": [{"node_id": "OTHER-000000", "name": "Other"},
+                                     {"node_id": "400H5-000001", "name": "Tube"}],
+                "get_node_config": {"cct_support": True, "cct_min": 2700, "cct_max": 10000,
+                                    "gm_support": True, "hsi_support": True},
+                "get_system_effect_list": ["fire", "fault_bulb", "rainbow"],
+                "get_sleep": False,
+                "get_intensity": 300,
+                "get_cct": {"cct": 3200, "intensity": 300, "gm": 150},
+            }.get(msg["action"])
+            await ws.send(json.dumps({"code": 0, "type": "response", "request_id": msg["request_id"],
+                                      "action": msg["action"], "data": data}))
+
+    async def go():
+        async with websockets.serve(fake_desktop, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            monkeypatch.setattr(desktop, "URL", f"ws://127.0.0.1:{port}/ws")
+            lamp = desktop.DesktopLight(make_light(config))
+            status = await lamp.read_status()
+            await lamp.set_white(5600, 40, tint=-3)
+            await lamp.set_effect("faulty_bulb", 20)  # Bluetooth's spelling still works
+            await lamp.close()
+            return status
+
+    status = asyncio.run(go())
+    assert (status["kelvin"], status["tint"], status["brightness"], status["power"]) == (3200, 5, 30, True)
+    set_cct = next(m for m in seen if m["action"] == "set_cct")
+    assert set_cct["node_id"] == "400H5-000001"
+    assert set_cct["args"] == {"cct": 5600, "intensity": 400, "gm": 70}
+    effect = next(m for m in seen if m["action"] == "set_system_effect")
+    assert effect["args"] == {"effect_type": "fault_bulb", "intensity": 200}

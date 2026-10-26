@@ -41,10 +41,9 @@ def _import(args: argparse.Namespace) -> None:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    from .config import load_light
-    from .light import AmaranLight
+    from .backends import current_light
 
-    lamp = AmaranLight(load_light())
+    lamp = current_light()
     rest = [float(v) for v in args.values] if args.command != "effect" else []
     try:
         match args.command:
@@ -89,6 +88,7 @@ def main() -> None:
         logging.getLogger().setLevel(logging.DEBUG)
 
     from .config import ConfigError
+    from .desktop import DesktopError
     from .link import LinkError
 
     try:
@@ -99,5 +99,5 @@ def main() -> None:
             mcp.run()
         else:
             asyncio.run(_run(args))
-    except (ConfigError, LinkError, ValueError) as err:
+    except (ConfigError, DesktopError, LinkError, ValueError) as err:
         raise SystemExit(f"error: {err}") from None
