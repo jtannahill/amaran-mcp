@@ -11,6 +11,8 @@
   amaran-mcp music-probe [SECONDS]              print the level of what this Mac is playing
   amaran-mcp music [--mood NAME]                run music mode in the foreground
   amaran-mcp music-stop                         stop a background music mode
+  amaran-mcp music-record SECONDS NAME          record a tuning clip of what this Mac plays
+  amaran-mcp music-replay PATH                  replay a clip through the analysis
 """
 
 from __future__ import annotations
@@ -71,6 +73,27 @@ def _music_probe(seconds: float) -> None:
         helper.wait(timeout=5)
 
 
+def _music_replay(path: Path) -> None:
+    """Print a clip's analysis as a compact timeline."""
+
+    from .music import clips
+
+    def short(row: dict, key: str, fmt: str = "{:.2f}") -> str:
+        value = row
+        for part in key.split("."):
+            value = value.get(part) if isinstance(value, dict) else None
+        return "-" if value is None else (fmt.format(value) if isinstance(value, float) else str(value))
+
+    columns = [("t", "t", "{:.0f}"), ("section", "section", "{}"), ("energy", "energy", "{:.2f}"),
+               ("bpm", "beat.bpm", "{:.0f}"), ("chord", "harmony.chord", "{}"),
+               ("balance", "harmony.balance", "{:+.2f}"), ("vocal", "timbre.vocal", "{:.2f}"),
+               ("tension", "timbre.tension", "{:.2f}"), ("open", "timbre.openness", "{:.2f}")]
+    print("  ".join(f"{name:>8}" for name, _, _ in columns) + "  events")
+    for row in clips.replay(path):
+        events = [e for e in ("drop", "release", "bloom") if row.get(e)]
+        print("  ".join(f"{short(row, key, fmt):>8}" for _, key, fmt in columns) + "  " + " ".join(events))
+
+
 async def _run(args: argparse.Namespace) -> None:
     from .backends import current_light
 
@@ -108,7 +131,8 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["import", "serve", "status", "on", "off",
                                             "brightness", "white", "color", "effect",
-                                            "music-probe", "music", "music-stop"])
+                                            "music-probe", "music", "music-stop",
+                                            "music-record", "music-replay"])
     parser.add_argument("values", nargs="*")
     parser.add_argument("--db", type=Path, help="amaran Desktop amaran.db (import)")
     parser.add_argument("--account", help="amaran account email or phone (import from the account)")
@@ -131,6 +155,12 @@ def main() -> None:
         elif args.command == "music":
             from .music.runner import RunnerConfig, run
             raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood))))
+        elif args.command == "music-record":
+            from .music import clips
+            seconds, name = float(args.values[0]), (args.values[1] if len(args.values) > 1 else "clip")
+            print(asyncio.run(clips.record(seconds, name)))
+        elif args.command == "music-replay":
+            _music_replay(Path(args.values[0]))
         elif args.command == "music-stop":
             from .music import control
             print("stopped" if control.stop() else "music mode was not running")

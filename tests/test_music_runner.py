@@ -9,7 +9,7 @@ import pytest
 
 from amaran_mcp.desktop import DesktopError
 from amaran_mcp.light import LightState
-from music_fixtures import kick_track, silence
+from music_fixtures import FakeSource, kick_track, silence
 
 RATE = 24000
 
@@ -22,23 +22,6 @@ def runner(tmp_path, monkeypatch):
     from amaran_mcp.music import runner as module
     importlib.reload(module)
     return module
-
-
-class FakeSource:
-    name = "fake"
-    rate = RATE
-
-    def __init__(self, parts, block=1024):
-        self._samples = np.concatenate(parts)
-        self._block = block
-
-    async def blocks(self):
-        for i in range(0, len(self._samples) - self._block + 1, self._block):
-            yield self._samples[i : i + self._block]
-            await asyncio.sleep(0)
-
-    async def close(self):
-        pass
 
 
 class FakeLight:

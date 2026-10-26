@@ -66,3 +66,36 @@ def silence(rate: int, seconds: float) -> np.ndarray:
 
 def feed_in_blocks(analyzer, samples: np.ndarray, block: int = 1024) -> list:
     return [analyzer.feed(samples[i : i + block]) for i in range(0, len(samples) - block + 1, block)]
+
+
+class FakeSource:
+    """A capture source that plays fixture audio as fast as it is read."""
+
+    name = "fake"
+
+    def __init__(self, parts, block=1024, rate=24000):
+        import numpy as _np
+        self._samples = _np.concatenate(parts)
+        self._block = block
+        self.rate = rate
+
+    async def blocks(self):
+        import asyncio as _asyncio
+        for i in range(0, len(self._samples) - self._block + 1, self._block):
+            yield self._samples[i : i + self._block]
+            await _asyncio.sleep(0)
+
+    async def close(self):
+        pass
+
+
+def write_wav(directory, samples, rate, name="clip.wav"):
+    import wave
+    path = directory / name
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm.tobytes())
+    return path
