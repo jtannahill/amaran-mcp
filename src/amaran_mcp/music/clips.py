@@ -16,7 +16,7 @@ import wave
 import numpy as np
 
 from ..config import CONFIG_DIR
-from .analysis import Analyzer
+from .analysis import Analyzer, merge_events
 from .capture import Source, SystemAudio
 
 CLIPS_DIR = CONFIG_DIR / "clips"
@@ -68,10 +68,14 @@ def replay(path: Path, every: float = 1.0) -> list[dict[str, Any]]:
     analyzer = Analyzer(rate)
     rows: list[dict[str, Any]] = []
     next_row = every
+    pending = None
     for start in range(0, len(samples) - BLOCK + 1, BLOCK):
         features = analyzer.feed(samples[start : start + BLOCK])
+        # Keep one-block events (bloom, release, lift) between rows.
+        pending = features if pending is None else merge_events(pending, features)
         t = (start + BLOCK) / rate
         if t >= next_row:
             next_row += every
-            rows.append({"t": round(t, 2), **asdict(features)})
+            rows.append({"t": round(t, 2), **asdict(pending)})
+            pending = None
     return rows

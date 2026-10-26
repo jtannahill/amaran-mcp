@@ -2,8 +2,8 @@
 
 12-bin chroma from a long FFT window (about 0.35 s, so low notes resolve),
 smoothed over about a second, matched against the 24 major and minor triads.
-A lift is the harmony opening upward: a change onto a major chord, or the
-major/minor balance rising quickly.
+A lift is the harmony opening upward: a change from a minor chord to a major
+one, or the major/minor balance rising quickly.
 """
 
 from __future__ import annotations
@@ -123,7 +123,8 @@ class HarmonyTracker:
             return False, False
         previous, self._current, self._candidate = self._current, label, None
         self._history.append((self._now, 1.0 if label[1] else -1.0))
-        onto_major = previous is not None and label[1]
+        # Minor to major is a lift; major to major (Ab to Gb) is just movement.
+        onto_major = previous is not None and not previous[1] and label[1]
         lift = (onto_major or self._balance_lift()) and self._now - self._last_lift >= LIFT_DEBOUNCE
         if lift:
             self._last_lift = self._now

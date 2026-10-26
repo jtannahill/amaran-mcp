@@ -2,7 +2,7 @@
 
 from amaran_mcp.music.analysis import Analyzer, merge_events
 from music_fixtures import (arrangement, feed_in_blocks, kick_track, make_features, pads_only, silence,
-                            speech_like, speech_over)
+                            speech_like, speech_over, sub_bass_pads, bass_swell)
 
 RATE = 24000
 
@@ -73,3 +73,23 @@ def test_merge_events_keeps_one_tick_events():
     merged = merge_events(earlier, later)
     assert merged.bloom and merged.beat.bar and merged.harmony.lift
     assert not merged.release
+
+
+def test_breakdown_with_sub_bass_still_detected():
+    """Seen on a real episode: the kick goes but the sub-bass holds."""
+    a = Analyzer(RATE)
+    feed_in_blocks(a, kick_track(RATE, 30, bpm=138))
+    held = feed_in_blocks(a, sub_bass_pads(RATE, 20))
+    assert at(held, 12).section == "breakdown"
+    back = feed_in_blocks(a, kick_track(RATE, 6, bpm=138))
+    releases = [i * 1024 / RATE for i, f in enumerate(back) if f.release]
+    assert len(releases) == 1 and releases[0] <= 2.0
+
+
+def test_bass_swell_in_breakdown_is_not_a_release():
+    a = Analyzer(RATE)
+    feed_in_blocks(a, kick_track(RATE, 30, bpm=138))
+    feed_in_blocks(a, sub_bass_pads(RATE, 15))
+    swell = feed_in_blocks(a, bass_swell(RATE, 12))
+    assert not any(f.release for f in swell)
+    assert swell[-1].section == "breakdown"

@@ -42,3 +42,29 @@ def test_blend_of_two_tempos_drops_confidence():
     mix = kick_track(RATE, 20, bpm=128) * 0.6 + kick_track(RATE, 20, bpm=134) * 0.6
     tail = feed_in_blocks(TempoTracker(RATE), mix)[-50:]
     assert min(b.confidence for b in tail) < CONFIDENT
+
+
+def test_pulse_tells_kick_from_held_sub_bass():
+    """Seen on a real episode: tempo confidence is slow, bass level is fooled by sub-bass."""
+    from music_fixtures import sub_bass_pads
+    t = TempoTracker(RATE)
+    groove = feed_in_blocks(t, kick_track(RATE, 30, bpm=138))
+    held = feed_in_blocks(t, sub_bass_pads(RATE, 20))
+    assert all(b.kick for b in groove[-40:])
+    assert not any(b.kick for b in held[-300:])
+
+
+def test_onset_jump_as_soon_as_the_kick_returns():
+    from music_fixtures import sub_bass_pads
+    t = TempoTracker(RATE)
+    feed_in_blocks(t, kick_track(RATE, 30, bpm=138))
+    held = feed_in_blocks(t, sub_bass_pads(RATE, 20))
+    assert max(b.onset_jump for b in held[-200:]) < 2
+    back = feed_in_blocks(t, kick_track(RATE, 3, bpm=138))
+    first = next(i for i, b in enumerate(back) if b.onset_jump >= 2)
+    assert first * 1024 / RATE <= 0.7
+
+
+def test_steady_groove_has_no_onset_jump():
+    beats = feed_in_blocks(TempoTracker(RATE), kick_track(RATE, 30, bpm=138))
+    assert max(b.onset_jump for b in beats[-400:]) < 2

@@ -233,3 +233,21 @@ def make_features(**fields):
                 section_seconds=10.0, release=False, bloom=False)
     base.update(fields)
     return Features(beat=beat, harmony=harmony, timbre=timbre, **base)
+
+
+def sub_bass_pads(rate: int, seconds: float) -> np.ndarray:
+    """A breakdown that keeps its sub-bass: pads over a held 55 Hz sine, no kick."""
+
+    t = np.arange(int(rate * seconds)) / rate
+    fade = np.minimum(1, t / 0.5)
+    return (_pads(rate, seconds) + 0.35 * np.sin(2 * np.pi * 55 * t) * fade).astype(np.float32)
+
+
+def bass_swell(rate: int, seconds: float) -> np.ndarray:
+    """Seen on a real episode: inside a breakdown the sub-bass swells and pumps
+    gently (sidechain), without a kick."""
+
+    t = np.arange(int(rate * seconds)) / rate
+    level = np.where(t < seconds / 2, 0.2, 0.45)  # an abrupt swell halfway
+    pump = 1 - 0.35 * (0.5 + 0.5 * np.cos(2 * np.pi * 2.3 * t))
+    return (_pads(rate, seconds) + level * pump * np.sin(2 * np.pi * 55 * t)).astype(np.float32)

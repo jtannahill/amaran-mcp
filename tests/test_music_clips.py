@@ -30,3 +30,11 @@ def test_replay_reports_sections_per_second(clips, tmp_path):
     rows = clips.replay(path)
     assert len(rows) in (11, 12) and rows[-1]["section"] in ("intro", "groove", "playing")
     assert {"t", "section", "energy"} <= rows[0].keys()
+
+
+def test_replay_rows_keep_one_block_events(clips, tmp_path):
+    from music_fixtures import arrangement
+    samples, _ = arrangement(24000)
+    path = write_wav(tmp_path, samples, 24000)
+    rows = clips.replay(path)
+    assert any(r["bloom"] for r in rows) and sum(r["release"] for r in rows) == 1

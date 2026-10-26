@@ -26,6 +26,11 @@ BEATS_PER_BAR = 4
 BARS_PER_PHRASE = 8
 PERIOD_SMOOTHING = 0.15  # how far each estimate moves a locked period
 PHASE_SMOOTHING = 0.2  # how far each estimate moves a locked grid
+PULSE_WINDOW = 2.0  # seconds: the short look that says whether the kick is in right now
+KICK_PULSE = 0.5  # beat strength at the remembered tempo that means a kick
+KICK_ONSETS = 0.3  # and at least this share of the groove's low-band onset energy
+JUMP_WINDOW = 0.5  # seconds compared against the rest of the envelope for onset_jump
+GROOVE_REFERENCE = 10.0  # seconds: how the groove's onset energy is remembered
 ONSET_SMOOTHING = 0.05  # seconds; onsets are one-frame spikes, and beat lengths
 # rarely fall on whole frames (138 BPM is 43.5 frames), so they are widened
 # before correlating
@@ -39,6 +44,12 @@ class Beat:
     phrase: bool  # an 8-bar boundary fell in this block
     seconds_to_bar: float | None
     seconds_to_phrase: float | None
+    # Whether the kick is in right now, from the last 2 s at the remembered
+    # tempo: quick where bpm/confidence (8 s window) are slow, and not fooled
+    # by a held sub-bass. Seen on a real episode.
+    kick: bool = False
+    onset_strength: float = 0.0  # low-band onset energy over 2 s / the groove's
+    onset_jump: float = 0.0  # last 0.5 s against the 8 s before: a kick slamming back
 
 
 class TempoTracker:
@@ -59,6 +70,13 @@ class TempoTracker:
         self._period: float | None = None  # seconds per beat, once locked
         self._grid: float | None = None  # time of beat number 0
         self._beats_reported = -1  # last beat index reported as a boundary
+        self._groove_onsets: float | None = None
+
+    @property
+    def locked(self) -> bool:
+        """A tempo has been found at some point (it is remembered through breakdowns)."""
+
+        return self._period is not None
 
     @property
     def now(self) -> float:
@@ -73,7 +91,7 @@ class TempoTracker:
         if self.now >= self._next_estimate:
             self._next_estimate = self.now + ESTIMATE_EVERY
             self._estimate()
-        return self._report()
+        return self._report(len(samples) / self.rate)
 
     def _frame(self, frame: np.ndarray) -> None:
         both = np.concatenate([self._last_frame, frame]) * self._window
@@ -146,9 +164,46 @@ class TempoTracker:
     def _beat_index(self, t: float) -> int:
         return int(math.floor((t - self._grid) / self._period))
 
-    def _report(self) -> Beat:
+    def _kick(self, dt: float) -> tuple[bool, float]:
+        frames = int(PULSE_WINDOW * self.frame_rate)
+        if self._period is None or len(self._envelope) < frames:
+            return False, 0.0
+        raw = np.array(self._envelope)[-frames:]
+        level = float(np.mean(raw))
+        width = max(3, int(ONSET_SMOOTHING * self.frame_rate) | 1)
+        kernel = np.hanning(width + 2)[1:-1]
+        env = np.convolve(raw, kernel / kernel.sum(), mode="same")
+        env = env - env.mean()
+        energy = float(np.dot(env, env))
+        lag = self._period * self.frame_rate
+        whole = int(lag)
+        pulse = 0.0
+        if energy > 1e-12 and whole + 1 < len(env):
+            a = float(np.dot(env[:-whole], env[whole:])) / energy
+            b = float(np.dot(env[: -(whole + 1)], env[whole + 1 :])) / energy
+            pulse = 2 * (a * (1 - (lag - whole)) + b * (lag - whole))  # one lag spans about half the window
+        # Learn the groove's onset energy only while the kick is clearly in,
+        # or a breakdown would teach it its own, lower level.
+        if self.confidence >= CONFIDENT and pulse >= KICK_PULSE:
+            ref = self._groove_onsets
+            self._groove_onsets = level if ref is None else ref + (level - ref) * min(1.0, dt / GROOVE_REFERENCE)
+        strength = level / self._groove_onsets if self._groove_onsets else 0.0
+        return pulse >= KICK_PULSE and strength >= KICK_ONSETS, strength
+
+    def _jump(self) -> float:
+        recent = int(JUMP_WINDOW * self.frame_rate)
+        if len(self._envelope) < recent * 4:
+            return 0.0
+        env = np.array(self._envelope)
+        before = float(np.mean(env[:-recent]))
+        now = float(np.mean(env[-recent:]))
+        return now / before if before > 1e-9 else (10.0 if now > 1e-6 else 0.0)
+
+    def _report(self, dt: float) -> Beat:
+        kick, strength = self._kick(dt)
+        jump = self._jump()
         if self._period is None or self.confidence < CONFIDENT:
-            return Beat(None, self.confidence, False, False, None, None)
+            return Beat(None, self.confidence, False, False, None, None, kick, strength, jump)
         index = self._beat_index(self.now)
         bar = phrase = False
         while self._beats_reported < index:
@@ -161,4 +216,4 @@ class TempoTracker:
         to_bar = (BEATS_PER_BAR - position % BEATS_PER_BAR) * self._period
         per_phrase = BEATS_PER_BAR * BARS_PER_PHRASE
         to_phrase = (per_phrase - position % per_phrase) * self._period
-        return Beat(60 / self._period, self.confidence, bar, phrase, to_bar, to_phrase)
+        return Beat(60 / self._period, self.confidence, bar, phrase, to_bar, to_phrase, kick, strength, jump)

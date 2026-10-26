@@ -32,3 +32,9 @@ def test_noise_has_no_confident_chord():
 def test_balance_tracks_major_minor_mix():
     minor = feed_in_blocks(HarmonyTracker(RATE), progression(RATE, [("A", True), ("D", True)] * 3, 4.0))
     assert minor[-1].balance < -0.5
+
+
+def test_major_to_major_is_not_a_lift():
+    """Seen on a real episode: Bbm-Ab-Gb-Ab would otherwise lift on every chord."""
+    hs = feed_in_blocks(HarmonyTracker(RATE), progression(RATE, [("G#", False), ("F#", False), ("G#", False)], 5.0))
+    assert not any(h.lift for h in hs)

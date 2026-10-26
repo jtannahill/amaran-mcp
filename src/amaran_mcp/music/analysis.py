@@ -33,7 +33,11 @@ MUSIC_GRACE = 3.0  # seconds without bass or sustained sound before it stops
 STEADY_WINDOW = 2.0  # seconds over which sound must be sustained (not bursty)
 STEADY_CV = 0.5  # max coefficient of variation of block level for "sustained"
 KICK_LEVEL = 0.4  # bass above this share of its reference: the kick is in
+KICK_PULSE = 0.3  # bass variation (std / mean over ~1 s) that means a kick, not a held sub
+PULSE_WINDOW = 1.0
 RELEASE_LEVEL = 0.8  # bass back above this share of its reference: release
+RELEASE_JUMP = 3.0  # low-band onsets in the last 0.5 s against the 8 s before
+RELEASE_PULSE = 0.45  # bass pulsing needed for a fast release (a swell pumps less)
 KICK_ARRIVES = 2.0  # seconds of kick that end an intro
 BREAKDOWN_BARS = 4  # kick gone this long after a groove
 BUILD_TENSION = 0.5
@@ -107,6 +111,8 @@ class Analyzer:
         self._bass_ref = _Follower(REFERENCE_SECONDS, REFERENCE_SECONDS)
         self._levels: deque[float] = deque()
         self._tensions: deque[tuple[float, float]] = deque()
+        self._bass_blocks: deque[float] = deque()
+        self._pulse_cv = 0.0
         self._bass_time = 0.0  # continuous seconds with a beat
         self._tonal_time = 0.0
         self._no_music_time = 0.0
@@ -135,6 +141,14 @@ class Analyzer:
         x = samples.astype(np.float64)
         level = float(np.sqrt(np.mean(x * x))) if n else 0.0
         bass = self._bass_amplitude(x)
+        # A kick makes the bass pulse block to block; a breakdown's held
+        # sub-bass does not. Seen on a real episode: level alone missed it.
+        self._bass_blocks.append(bass)
+        while len(self._bass_blocks) > max(2, int(PULSE_WINDOW / dt)):
+            self._bass_blocks.popleft()
+        recent = np.array(self._bass_blocks)
+        self._pulse_cv = float(recent.std() / recent.mean()) if recent.mean() > 0 else 0.0
+        pulsing = self._pulse_cv > KICK_PULSE
         beat = self.tempo.feed(samples)
         harmony = self.harmony.feed(samples)
         timbre = self.timbre.feed(samples)
@@ -170,14 +184,14 @@ class Analyzer:
             # must not lower the bar the release has to clear.
             kick_ref = self._bass_ref.value
             if self.section in ("groove", "climax", "intro") and (kick_ref is None or bass_now > KICK_LEVEL * kick_ref):
-                if share > BASS_SHARE:
+                if share > BASS_SHARE and pulsing:
                     self._bass_ref.update(bass_now, dt)
         else:
             reference = self._level_ref.value or level
         bass_ref = self._bass_ref.value or 0.0
         relative_energy = min(1.0, max(0.0, 0.5 * energy / reference)) if reference else 0.0
 
-        release = self._sections(dt, level, bass_now, bass_ref, share, relative_energy, timbre)
+        release = self._sections(dt, level, bass_now, bass_ref, share, pulsing, relative_energy, timbre, beat)
         bloom = harmony.lift and self.section == "breakdown"
 
         return Features(
@@ -195,7 +209,7 @@ class Analyzer:
         )
 
     def _sections(self, dt: float, level: float, bass_now: float, bass_ref: float, share: float,
-                  energy: float, timbre: Timbre) -> bool:
+                  pulsing: bool, energy: float, timbre: Timbre, beat: Beat) -> bool:
         """Advance the section state machine; True on a release."""
 
         # Silence covers no sound at all and sound that is not music.
@@ -207,7 +221,11 @@ class Analyzer:
         if not self.is_music:
             return False
 
-        kick = share > BASS_SHARE and (bass_ref == 0 or bass_now >= KICK_LEVEL * bass_ref)
+        if self.tempo.locked:
+            # The short look at the remembered tempo: a held sub-bass is not a kick.
+            kick = beat.kick
+        else:
+            kick = pulsing and share > BASS_SHARE and (bass_ref == 0 or bass_now >= KICK_LEVEL * bass_ref)
         self._kick_time = self._kick_time + dt if kick else 0.0
         self._no_kick_time = 0.0 if kick else self._no_kick_time + dt
 
@@ -224,9 +242,16 @@ class Analyzer:
             if self._kick_time >= KICK_ARRIVES:
                 self._enter("groove")
         elif section in ("breakdown", "build"):
-            if bass_ref and bass_now > RELEASE_LEVEL * bass_ref and share > BASS_SHARE:
+            bass_back = bass_ref and bass_now > RELEASE_LEVEL * bass_ref
+            # Within half a second of a real drop; a breakdown's bass swell
+            # (seen on a real episode) jumps less and pumps more gently.
+            slam = beat.onset_jump >= RELEASE_JUMP and self._pulse_cv >= RELEASE_PULSE and bass_back
+            if slam or (kick and bass_back):
                 self._enter("climax")
-                self._calm_time = 0.0
+                # The kick is back by definition, even before the slower test
+                # confirms it; otherwise the breakdown's no-kick time sends the
+                # section straight back.
+                self._calm_time = self._no_kick_time = 0.0
                 return True
             if section == "breakdown" and self._build_time >= BUILD_BARS * self._bar():
                 self._enter("build")
