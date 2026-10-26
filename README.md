@@ -26,11 +26,12 @@ each confirmed by the light's own status reports.
   level and the light's own status reports are available.
 
 Set `AMARAN_BACKEND=desktop` or `bluetooth` to force one. The Desktop API wants
-a token in each request: set `AMARAN_OPENAPI_KEY` to the key from an approved
-amaran OpenAPI application (hex or base64). Without one, the server signs with
-a random key, as the Bitfocus Companion module does, which current Desktop
-builds accept. How an approved key is meant to be used is a guess until one is
-issued.
+a token in each request, signed with the key from an approved amaran OpenAPI
+application (apply in amaran Desktop's User Center). Put the key in
+`~/.config/amaran-mcp/openapi_key` (mode 600) or `AMARAN_OPENAPI_KEY`.
+Without one, the server signs with a random key, as the Bitfocus Companion
+module does. amaran Desktop 1.1 accepts any token, even a malformed one, so
+whether an approved key is used exactly as intended cannot be verified yet.
 
 ## How the Bluetooth backend works
 

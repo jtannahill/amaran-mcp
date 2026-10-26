@@ -20,13 +20,14 @@ from typing import Any
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import websockets
 
-from .config import Capabilities, Light
+from .config import CONFIG_DIR, Capabilities, Light
 from .light import LightBase, LightState
 
 log = logging.getLogger(__name__)
 
 HOST, PORT = "127.0.0.1", 33782
 URL = f"ws://{HOST}:{PORT}/ws"
+OPENAPI_KEY_PATH = CONFIG_DIR / "openapi_key"
 
 # Desktop's tint scale is 0..200 with 100 neutral; ours is -10..+10.
 GM_STEP = 10
@@ -51,12 +52,15 @@ def desktop_running(timeout: float = 0.3) -> bool:
 def _token() -> str:
     """The request token: an AES-256-GCM encrypted timestamp, base64 of iv|tag|ct.
 
-    With AMARAN_OPENAPI_KEY (the key from an approved OpenAPI application, as
-    hex or base64) the timestamp is encrypted with it. Without one, a random key
-    is used, as the Companion module does; current Desktop builds accept that.
+    The key is the one from an approved OpenAPI application (base64 or hex),
+    from AMARAN_OPENAPI_KEY or ~/.config/amaran-mcp/openapi_key. Without one, a
+    random key is used, as the Companion module does. Desktop 1.1 accepts any
+    token, so which form a real key takes cannot be checked yet.
     """
 
     configured = os.environ.get("AMARAN_OPENAPI_KEY")
+    if not configured and OPENAPI_KEY_PATH.exists():
+        configured = OPENAPI_KEY_PATH.read_text().strip()
     if configured:
         try:
             key = bytes.fromhex(configured)
