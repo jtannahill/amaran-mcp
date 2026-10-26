@@ -364,9 +364,12 @@ will.
   rules remain as the fallback when the model is missing or unsure.
 - Training data, in order of value: the owner's own labelled clips (breakdowns
   they mark from their episodes), public EDM structure labels where the audio
-  is legitimately available (the Socially Significant Music Events set of
-  Creative Commons SoundCloud EDM with drop, build and break marked; EDM-98 if
-  its audio can be obtained), and synthetic arrangements for bootstrapping.
+  is legitimately available, and synthetic arrangements for bootstrapping.
+  Confirmed available: the Socially Significant Music Events set (Yadati et
+  al., IEEE TMM; osf.io/eydxk): 402 full Creative Commons SoundCloud EDM
+  tracks, average 4.9 minutes, with expert-labelled drop times and build and
+  break start/end times in a .mat file per track (1.9 GB, split zip).
+  EDM-98 only if its audio can be obtained.
 - The model ships only if, on held-out tracks (split by track, never by
   frame), it beats the rules on frame accuracy and on boundary accuracy
   (within 2 s), and on the owner's held-out clips in particular.
