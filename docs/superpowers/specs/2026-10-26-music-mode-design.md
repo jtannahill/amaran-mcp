@@ -2,7 +2,8 @@
 
 Date: 2026-10-26. Status: approved by the owner on 2026-10-26; revised the
 same day after the first live run (see "Revision: musical understanding"),
-revision approved by the owner in conversation.
+and again for machine learning (see "Revision 2: machine learning"); both
+revisions approved by the owner in conversation.
 
 ## Intent
 
@@ -276,7 +277,7 @@ this Mac, outside the repository, and are never uploaded.
   vocal band (about 200 Hz to 4 kHz) that is not in the sustained pad: pitch
   movement (vibrato around 4 to 7 Hz, glides) and harmonic peaks that come
   and go, against the slow-changing accompaniment. Tuned on the owner's
-  tracks. An ML model is not part of this revision. Because the bloom is
+  tracks. (Superseded by Revision 2: Apple's on-device sound classifier.) Because the bloom is
   gated by a chord lift in a breakdown, the vocal estimate only scales the
   bloom's size; a lead synth mistaken for a voice makes a bigger bloom, never
   a spurious one, and host speech outside a lift does nothing.
@@ -316,6 +317,97 @@ this Mac, outside the repository, and are never uploaded.
   the MCP tools and the slew limits are kept. The renderer and analyzer are
   extended; the first version's breakdown and drop tests are replaced by
   section tests.
+
+## Revision 2: machine learning
+
+After the first tuning session on a real ASOT breakdown, the owner asked to
+analyse hundreds of tracks ("more the merrier"), to "use ML!", and to outline
+the research and tuning/training when the repository is updated. Claude
+proposed the four parts below; the owner said "yes, update the design and
+plan".
+
+What the first real clip taught (the evidence behind this revision): a
+breakdown that keeps its sub-bass fooled the bass-level kick rule; tempo
+confidence on mastered tracks is far lower than on synthetic kicks (on 30
+GiantSteps tracks, 10 locked at the old threshold, 25 at a lower one, and
+every lock was the right tempo); and the hand-built vocal estimate read high
+through the whole groove. Rules tuned on one clip will not generalise; data
+will.
+
+### 1. Voice: Apple's on-device sound classifier
+
+- macOS SoundAnalysis ships a built-in classifier (303 classes on this Mac,
+  including speech, singing, choir_singing, rapping, synthesizer, bass_drum,
+  crowd, cheering, applause). It runs on-device; nothing is downloaded or
+  sent anywhere.
+- The Swift capture helper runs it on the same tapped audio and reports, about
+  twice a second, the confidence of: singing, choir_singing, speech, rapping,
+  cheering, crowd, applause.
+- Music mode's vocal reading becomes: singing (or choir) confidence, held down
+  while speech is high. The bloom's size follows it; host speech over the
+  music (ASOT voice-overs, show IDs) never counts as a vocal. Crowd and
+  applause (live sets) are recorded for later use, not acted on.
+- The microphone fallback has no helper; it keeps the heuristic estimate.
+
+### 2. Sections: a small trained model
+
+- A compact classifier maps a window of music mode's own features (energy,
+  bass, kick presence and pulse, onset jump, tension, openness, harmony
+  balance and confidence, chord change rate, singing, speech, over the last
+  ~16 s) to probabilities for intro, groove, breakdown, build and climax.
+- It is trained offline and shipped as a small weights file in the
+  repository; inference is a few matrix products in numpy, well under a
+  millisecond, so the real-time loop is unaffected.
+- The existing state machine stays on top: the model proposes, the state
+  machine enforces musical order and minimum durations (a breakdown cannot
+  last one second; a release only follows a breakdown or build). The current
+  rules remain as the fallback when the model is missing or unsure.
+- Training data, in order of value: the owner's own labelled clips (breakdowns
+  they mark from their episodes), public EDM structure labels where the audio
+  is legitimately available (the Socially Significant Music Events set of
+  Creative Commons SoundCloud EDM with drop, build and break marked; EDM-98 if
+  its audio can be obtained), and synthetic arrangements for bootstrapping.
+- The model ships only if, on held-out tracks (split by track, never by
+  frame), it beats the rules on frame accuracy and on boundary accuracy
+  (within 2 s), and on the owner's held-out clips in particular.
+
+### 3. Tempo and key: benchmarks that tune the trackers
+
+- Tempo: GiantSteps tempo (664 two-minute Beatport previews, crowd-corrected
+  tempo labels). Key: the Beatport EDM Key Dataset (1,486 excerpts, CC BY-SA
+  4.0 labels). Scored the MIREX way, per genre, trance and house reported
+  separately.
+- Their thresholds (tempo confidence and spikiness, chroma weighting, chord
+  confidence) are tuned on these sets and the before and after scores
+  recorded. A learned tempo or key model is only built if the benchmarks show
+  the trackers cannot get close.
+
+### 4. The write-up
+
+`docs/research.md` in the repository: what the trance research says (with
+sources), the datasets and their licences, benchmark scores before and after,
+each tuning decision with the real-clip evidence, the section model (features,
+training data, held-out results against the rules), and how to reproduce
+every number. No audio is committed: datasets live under `~/datasets`, the
+owner's clips under `~/.config/amaran-mcp/clips`.
+
+### Builder's calls for Revision 2 (Claude, not confirmed by the owner)
+
+- **Helper output channel.** PCM stays on stdout; classifier results go to
+  file descriptor 3 as one JSON line each (`{"t": seconds, "singing": p, ...}`)
+  so the audio stream is untouched. The helper takes `--classify` to enable it.
+- **Model type.** A small multilayer perceptron (two hidden layers of 32)
+  trained with scikit-learn as a development dependency only, exported to
+  `src/amaran_mcp/music/sections.npz` (weights plus feature means and scales)
+  and run in numpy at runtime. scikit-learn is not a runtime dependency.
+- **Labels.** A label file per clip in `~/.config/amaran-mcp/labels/`
+  (`[{"start": s, "end": s, "section": name}]`); `amaran-mcp music-label CLIP`
+  prints the replay timeline and records section times typed by the owner or
+  dictated to Claude. Public-dataset labels are converted to the same format
+  (drop maps to climax, break to breakdown, build to build, the rest groove).
+- **Evaluation.** `tools/train_sections.py` trains, cross-validates by track,
+  prints the rules baseline beside the model, and refuses to write the
+  weights file if the model does not beat the rules on the held-out set.
 
 ## Left to the builder
 
