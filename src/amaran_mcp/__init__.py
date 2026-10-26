@@ -9,6 +9,8 @@
   amaran-mcp color HUE [SAT] [PCT]
   amaran-mcp effect NAME [PCT] | effect off
   amaran-mcp music-probe [SECONDS]              print the level of what this Mac is playing
+  amaran-mcp music [--mood NAME]                run music mode in the foreground
+  amaran-mcp music-stop                         stop a background music mode
 """
 
 from __future__ import annotations
@@ -106,12 +108,13 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["import", "serve", "status", "on", "off",
                                             "brightness", "white", "color", "effect",
-                                            "music-probe"])
+                                            "music-probe", "music", "music-stop"])
     parser.add_argument("values", nargs="*")
     parser.add_argument("--db", type=Path, help="amaran Desktop amaran.db (import)")
     parser.add_argument("--account", help="amaran account email or phone (import from the account)")
     parser.add_argument("--country", default="US", help="account country code (import --account)")
     parser.add_argument("--name", help="which light to import, if there are several")
+    parser.add_argument("--mood", default="ethereal", help="music mode mood: ethereal, deep or dawn")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.verbose:
@@ -125,6 +128,12 @@ def main() -> None:
     try:
         if args.command == "import":
             _import(args)
+        elif args.command == "music":
+            from .music.runner import RunnerConfig, run
+            raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood))))
+        elif args.command == "music-stop":
+            from .music import control
+            print("stopped" if control.stop() else "music mode was not running")
         elif args.command == "music-probe":
             _music_probe(float(args.values[0]) if args.values else 10)
         elif args.command == "serve":

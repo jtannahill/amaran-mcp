@@ -1,4 +1,4 @@
-"""MCP tools for one amaran light over Bluetooth."""
+"""MCP tools for one amaran light, including music mode."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from .backends import close_all, current_light as light
 from .config import ConfigError, load_scenes
 from .desktop import DesktopError
 from .link import LinkError
+from .music import control
+from .music.moods import MOODS
 
 
 @asynccontextmanager
@@ -33,12 +35,13 @@ mcp = MCPServer(
         "Controls the user's amaran light from this Mac, through amaran Desktop when "
         "it is running, otherwise over Bluetooth directly. "
         "Brightness is a percentage. If brightness is left out, the light keeps "
-        "its current brightness. Commands wake the light if it is off."
+        "its current brightness. Commands wake the light if it is off. "
+        "Music mode (start_music_mode) makes the light follow what this Mac is "
+        "playing; other light commands stop it, except set_brightness, which "
+        "moves its brightness range."
     ),
     lifespan=lifespan,
 )
-
-
 
 def tool(**options: Any):
     """Register a tool whose expected failures reach the model as readable errors."""
@@ -56,6 +59,13 @@ def tool(**options: Any):
     return register
 
 
+def take_over() -> None:
+    """A direct light command ends music mode first, so the two never fight."""
+
+    if control.status():
+        control.stop()
+
+
 Percent = Annotated[float, Field(ge=0, le=100, description="Brightness, 0-100 %")]
 CHANGES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True)
 
@@ -66,8 +76,13 @@ async def get_light() -> dict[str, Any]:
 
     Also lists what this model supports (colour temperature range, effects)."""
 
+    music = control.status() or {"running": False}
     lamp = light()
+    if music["running"] and lamp.backend == "bluetooth":
+        # Music mode holds the light's one Bluetooth connection.
+        return {"light": lamp.name, "backend": lamp.backend, "music_mode": music}
     status = await lamp.read_status()
+    status["music_mode"] = music
     status["supports"] = {
         "kelvin_range": [lamp.caps.kelvin_min, lamp.caps.kelvin_max] if lamp.caps.cct else None,
         "tint": lamp.caps.tint,
@@ -82,14 +97,22 @@ async def get_light() -> dict[str, Any]:
 async def set_power(on: bool) -> str:
     """Turn the light on or off. On restores what it was doing before."""
 
+    take_over()
     await light().set_power(on)
     return "on" if on else "off"
 
 
 @tool(annotations=CHANGES)
 async def set_brightness(brightness: Percent) -> str:
-    """Change brightness only, keeping the current white, colour or effect."""
+    """Change brightness only, keeping the current white, colour or effect.
 
+    While music mode runs, this moves music mode's brightness range instead."""
+
+    music = control.status()
+    if music:
+        offset = control.set_brightness(brightness)
+        low, high = control.brightness_range(music.get("mood") or "ethereal", offset)
+        return f"music mode brightness range moved to {low:g}..{high:g}%"
     await light().set_brightness(brightness)
     return f"brightness {brightness:g}%"
 
@@ -102,6 +125,7 @@ async def set_white(
 ) -> str:
     """Set white light by colour temperature. get_light shows this model's range."""
 
+    take_over()
     lamp = light()
     await lamp.set_white(kelvin, brightness, tint)
     return f"white {kelvin}K at {lamp.state.brightness}%" + (f", tint {tint:+d}" if tint else "")
@@ -125,6 +149,7 @@ async def set_color(
         hue, saturation = h * 360, s * 100
     if hue is None:
         raise ValueError("Give a hue or a hex colour")
+    take_over()
     lamp = light()
     await lamp.set_color(hue, saturation, brightness)
     return f"colour hue {lamp.state.hue}, saturation {lamp.state.saturation}% at {lamp.state.brightness}%"
@@ -137,6 +162,7 @@ async def set_effect(
 ) -> str:
     """Start one of the light's built-in effects."""
 
+    take_over()
     lamp = light()
     await lamp.set_effect(effect, brightness)
     return f"effect {effect} at {lamp.state.brightness}%"
@@ -146,6 +172,7 @@ async def set_effect(
 async def stop_effect() -> str:
     """Stop the running effect and return to the last steady white or colour."""
 
+    take_over()
     await light().stop_effect()
     return "effect stopped"
 
@@ -163,4 +190,25 @@ async def save_scene(name: str) -> dict[str, Any]:
 async def recall_scene(name: str) -> dict[str, Any]:
     """Put the light back into a saved scene. get_light lists the saved scenes."""
 
+    take_over()
     return await light().recall_scene(name)
+
+
+@tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+async def start_music_mode(
+    mood: Annotated[str, Field(description="ethereal (default), deep or dawn")] = "ethereal",
+) -> dict[str, Any]:
+    """Start music mode: the light follows what this Mac is playing (including AirPlay from an iPhone) with slow, ethereal colour. Moods: ethereal, deep, dawn."""
+
+    if mood not in MOODS:
+        raise ValueError(f"Unknown mood {mood!r}. Moods: {', '.join(MOODS)}")
+    return control.start(mood)
+
+
+@tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+async def stop_music_mode() -> str:
+    """Stop music mode and return the light to how it was."""
+
+    if control.stop():
+        return "music mode stopped; the light is back to how it was"
+    return "music mode was not running"
