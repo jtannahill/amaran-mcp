@@ -99,3 +99,50 @@ def write_wav(directory, samples, rate, name="clip.wav"):
         w.setframerate(rate)
         w.writeframes(pcm.tobytes())
     return path
+
+
+NOTES = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
+
+
+def chord(rate: int, seconds: float, root: str, minor: bool, octave: int = 4) -> np.ndarray:
+    """A sustained triad (with a bass root an octave down), soft attack and release."""
+
+    n = int(rate * seconds)
+    t = np.arange(n) / rate
+    base = 12 * (octave + 1) + NOTES[root]  # MIDI number
+    out = np.zeros(n)
+    for midi, gain in ((base - 12, 0.6), (base, 1.0), (base + (3 if minor else 4), 0.9), (base + 7, 0.8)):
+        f = 440.0 * 2 ** ((midi - 69) / 12)
+        out += gain * (np.sin(2 * np.pi * f * t) + 0.3 * np.sin(4 * np.pi * f * t))
+    fade = np.minimum(1, np.minimum(t / 0.2, (seconds - t) / 0.2))
+    return (0.05 * out * fade).astype(np.float32)
+
+
+def progression(rate: int, chords: list[tuple[str, bool]], seconds_each: float) -> np.ndarray:
+    return np.concatenate([chord(rate, seconds_each, root, minor) for root, minor in chords])
+
+
+def riser(rate: int, seconds: float) -> np.ndarray:
+    """A build: noise sweeping upward plus snare hits that speed up."""
+
+    rng = np.random.default_rng(RNG_SEED)
+    n = int(rate * seconds)
+    out = np.zeros(n)
+    seg = int(rate * 0.25)
+    for start in range(0, n, seg):
+        end = min(start + seg, n)
+        noise = rng.standard_normal(end - start)
+        spectrum = np.fft.rfft(noise)
+        freqs = np.fft.rfftfreq(end - start, 1 / rate)
+        cutoff = 200 * (40 ** (start / n))  # 200 Hz rising to about 8 kHz
+        spectrum[freqs < cutoff] = 0
+        out[start:end] = np.fft.irfft(spectrum, end - start) * (0.05 + 0.25 * start / n)
+    pos, gap = 0.0, 0.45
+    hit = int(rate * 0.06)
+    while pos < seconds - 0.1:
+        i = int(pos * rate)
+        burst = rng.standard_normal(min(hit, n - i)) * np.exp(-np.arange(min(hit, n - i)) / rate * 50)
+        out[i : i + len(burst)] += 0.3 * burst
+        pos += gap
+        gap = max(0.06, gap * 0.93)
+    return out.astype(np.float32)
