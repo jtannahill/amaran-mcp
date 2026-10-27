@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any
 
@@ -23,6 +25,18 @@ log = logging.getLogger(__name__)
 RECORDINGS_DIR = CONFIG_DIR / "recordings"
 OUTPUT_RATE = 24000
 MARK_KINDS = ("breakdown", "lift", "vocal", "build", "drop", "other")
+# A launch agent's PATH has no Homebrew folders (seen live: the listener crashed).
+FFMPEG_CANDIDATES = ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
+
+
+def ffmpeg() -> str:
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    for candidate in FFMPEG_CANDIDATES:
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return "ffmpeg"
 
 
 def recordings_size() -> int:
@@ -49,19 +63,29 @@ class Recorder:
         self.directory.mkdir(parents=True, exist_ok=True)
         self._segment += 1
         path = self.directory / f"audio-{self._segment:03d}.flac"
-        self._encoder = subprocess.Popen(
-            ["ffmpeg", "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", "1", "-i", "-",
-             "-ar", str(OUTPUT_RATE), "-c:a", "flac", "-y", str(path)],
-            stdin=subprocess.PIPE)
+        try:
+            self._encoder = subprocess.Popen(
+                [ffmpeg(), "-v", "error", "-f", "f32le", "-ar", str(rate), "-ac", "1", "-i", "-",
+                 "-ar", str(OUTPUT_RATE), "-c:a", "flac", "-y", str(path)],
+                stdin=subprocess.PIPE)
+        except OSError as err:
+            self._encoder = None
+            self.stopped = f"recording stopped: ffmpeg could not start ({err})"
+            log.error(self.stopped)
         self._segment_seconds = 0.0
 
     def _close_segment(self) -> None:
         encoder, self._encoder = self._encoder, None
         if encoder:
-            encoder.stdin.close()
+            try:
+                encoder.stdin.close()
+            except OSError:
+                pass
             encoder.wait(timeout=30)
 
     def _written(self) -> int:
+        if not self.directory.exists():
+            return self._base_size
         return self._base_size + sum(p.stat().st_size for p in self.directory.glob("audio-*.flac"))
 
     def write(self, block: np.ndarray, rate: int) -> None:
@@ -70,7 +94,15 @@ class Recorder:
         self._rate = rate
         if self._encoder is None:
             self._open_segment(rate)
-        self._encoder.stdin.write(np.asarray(block, dtype="<f4").tobytes())
+            if self._encoder is None:
+                return
+        try:
+            self._encoder.stdin.write(np.asarray(block, dtype="<f4").tobytes())
+        except (BrokenPipeError, OSError) as err:
+            self._encoder = None
+            self.stopped = f"recording stopped: ffmpeg failed ({err})"
+            log.error(self.stopped)
+            return
         dt = len(block) / rate
         self.seconds += dt
         self._segment_seconds += dt

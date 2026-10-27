@@ -75,3 +75,22 @@ def test_mark_tool_says_when_not_recording(tmp_path, monkeypatch):
     importlib.reload(control)
     from amaran_mcp import server
     assert "nothing is recording" in asyncio.run(server.mark_music_moment("lift"))
+
+
+def test_ffmpeg_found_without_homebrew_on_path(recorder, monkeypatch, tmp_path):
+    """Launch agents run with a minimal PATH (seen live: the listener crashed)."""
+    fake = tmp_path / "bin" / "ffmpeg"
+    fake.parent.mkdir()
+    fake.write_text("")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setattr(recorder, "FFMPEG_CANDIDATES", (str(fake),))
+    assert recorder.ffmpeg() == str(fake)
+
+
+def test_encoder_failure_stops_recording_not_the_caller(recorder, tmp_path, monkeypatch):
+    monkeypatch.setattr(recorder, "ffmpeg", lambda: "/nonexistent/ffmpeg")
+    rec = recorder.Recorder(tmp_path / "session")
+    feed(rec, kick_track(RATE, 3))  # must not raise
+    rec.close()
+    assert rec.stopped and "ffmpeg" in rec.stopped
