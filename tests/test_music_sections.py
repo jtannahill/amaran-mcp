@@ -111,3 +111,12 @@ def test_tree_export_matches_scikit_learn():
     assert np.allclose(ours[:, order], theirs, atol=1e-6)
     single = model.proba(X[0])
     assert abs(single[clf.classes_[0]] - theirs[0, 0]) < 1e-6
+
+
+def test_pooled_boundary_score_does_not_reward_predicting_nothing():
+    import train_sections
+    # Two tracks: one with a build the rules never call, one with no build at all.
+    with_build = score_sections.score(["groove"] * 20 + ["build"] * 10, ["groove"] * 30, [], [])
+    without = score_sections.score(["groove"] * 30, ["groove"] * 30, [], [])
+    pooled = train_sections.summarise([with_build, without])
+    assert pooled["build_f"] == 0.0  # per-track averaging would give 0.5

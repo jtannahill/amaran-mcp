@@ -36,7 +36,21 @@ def match(true: list[float], predicted: list[float], tolerance: float = TOLERANC
     precision = hits / len(predicted) if predicted else (1.0 if not true else 0.0)
     recall = hits / len(true) if true else (1.0 if not predicted else 0.0)
     f = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    return {"precision": precision, "recall": recall, "f": f, "true": len(true), "predicted": len(predicted)}
+    return {"precision": precision, "recall": recall, "f": f, "hits": hits, "true": len(true),
+            "predicted": len(predicted)}
+
+
+def pooled_f(results: list[dict]) -> float:
+    """F over all tracks' hits, misses and false alarms together. Averaging per
+    track would score a track with nothing to find and nothing predicted as 1.0,
+    rewarding a detector that never fires."""
+
+    hits = sum(r["hits"] for r in results)
+    true = sum(r["true"] for r in results)
+    predicted = sum(r["predicted"] for r in results)
+    precision = hits / predicted if predicted else 0.0
+    recall = hits / true if true else 0.0
+    return 2 * precision * recall / (precision + recall) if precision + recall else 0.0
 
 
 def score(truth: Sequence[str], predicted: Sequence[str], true_releases: list[float],
@@ -52,4 +66,5 @@ def score(truth: Sequence[str], predicted: Sequence[str], true_releases: list[fl
         "balanced_accuracy": sum(recalls) / len(recalls) if recalls else 0.0,
         "boundaries": {name: match(starts(truth[:n], name), starts(predicted[:n], name)) for name in SCORED},
         "release_f": match(true_releases, predicted_releases)["f"],
+        "releases": match(true_releases, predicted_releases),
     }

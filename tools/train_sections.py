@@ -103,9 +103,10 @@ def summarise(results: list[dict]) -> dict[str, float]:
     return {
         "balanced_accuracy": float(np.mean([r["balanced_accuracy"] for r in results])),
         "frame_accuracy": float(np.mean([r["frame_accuracy"] for r in results])),
-        "breakdown_f": float(np.mean([r["boundaries"]["breakdown"]["f"] for r in results])),
-        "build_f": float(np.mean([r["boundaries"]["build"]["f"] for r in results])),
-        "release_f": float(np.mean([r["release_f"] for r in results])),
+        # Boundary and release scores pooled over all tracks (score_sections.pooled_f).
+        "breakdown_f": score_sections.pooled_f([r["boundaries"]["breakdown"] for r in results]),
+        "build_f": score_sections.pooled_f([r["boundaries"]["build"] for r in results]),
+        "release_f": score_sections.pooled_f([r["releases"] for r in results]),
     }
 
 
