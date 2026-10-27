@@ -71,8 +71,13 @@ def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, re
         raise ValueError(f"Unknown mood {mood!r}. Moods: {', '.join(MOODS)}")
     if status():
         stop()
+    from . import listener
+
     runner.CONTROL_PATH.unlink(missing_ok=True)  # a new session starts at the mood's own range
-    runner.MARKS_PATH.unlink(missing_ok=True)
+    if listener.status():
+        record = False  # the background listener records; never twice
+    else:
+        runner.MARKS_PATH.unlink(missing_ok=True)
     argv = [sys.executable, "-m", "amaran_mcp", "music", "--mood", mood]
     pid = spawn(argv if record else argv + ["--no-record"])
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -83,14 +88,18 @@ def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, re
 def mark(kind: str, note: str | None = None) -> dict:
     """Flag a moment in the session being recorded (music mode places it in time)."""
 
+    from . import listener
     from .recorder import MARK_KINDS
 
     current = status()
-    if not current or not current.get("recording"):
-        raise RuntimeError("music mode is not recording")
+    background = listener.status()
+    recording = (current or {}).get("recording") or (background or {}).get("recording")
+    if not recording:
+        raise RuntimeError("nothing is recording right now (play some music first)")
     if kind not in MARK_KINDS:
         raise ValueError(f"Mark kinds are: {', '.join(MARK_KINDS)}")
     entry = {"wall": time.time(), "kind": kind, "note": note}
+    runner.MARKS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(runner.MARKS_PATH, "a") as marks:
         marks.write(json.dumps(entry) + "\n")
     return entry

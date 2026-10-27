@@ -69,8 +69,9 @@ def test_mark_tool_says_when_not_recording(tmp_path, monkeypatch):
     monkeypatch.setenv("AMARAN_MCP_HOME", str(tmp_path / "cfg"))
     from amaran_mcp import config
     importlib.reload(config)
-    from amaran_mcp.music import control, runner
+    from amaran_mcp.music import control, listener, runner
     importlib.reload(runner)
+    importlib.reload(listener)
     importlib.reload(control)
     from amaran_mcp import server
-    assert "not recording" in asyncio.run(server.mark_music_moment("lift"))
+    assert "nothing is recording" in asyncio.run(server.mark_music_moment("lift"))

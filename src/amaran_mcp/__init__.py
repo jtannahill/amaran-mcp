@@ -11,6 +11,8 @@
   amaran-mcp music-probe [SECONDS]              print the level of what this Mac is playing
   amaran-mcp music [--mood NAME] [--log-features PATH]   run music mode in the foreground
   amaran-mcp music-stop                         stop a background music mode
+  amaran-mcp listen                             record listening sessions (no light); run at login
+  amaran-mcp install-listener | uninstall-listener   the launch agent that runs `listen`
   amaran-mcp music-record SECONDS NAME          record a tuning clip of what this Mac plays
   amaran-mcp music-replay PATH                  replay a clip through the analysis
 """
@@ -91,6 +93,41 @@ def _music_probe(seconds: float) -> None:
         helper.wait(timeout=5)
 
 
+LAUNCH_AGENT = "com.jtannahill.amaran-listen"
+
+
+def _launch_agent(install: bool) -> None:
+    """Start (or remove) the background listener at login, as this user."""
+
+    import os
+    import plistlib
+    import shutil
+    import subprocess
+
+    plist = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCH_AGENT}.plist"
+    domain = f"gui/{os.getuid()}"
+    subprocess.run(["launchctl", "bootout", f"{domain}/{LAUNCH_AGENT}"], capture_output=True)
+    if not install:
+        plist.unlink(missing_ok=True)
+        print("listener removed")
+        return
+    from .config import CONFIG_DIR
+
+    project = Path(__file__).resolve().parents[2]
+    plist.parent.mkdir(parents=True, exist_ok=True)
+    plist.write_bytes(plistlib.dumps({
+        "Label": LAUNCH_AGENT,
+        "ProgramArguments": [shutil.which("uv") or "uv", "--directory", str(project), "run", "amaran-mcp", "listen"],
+        "RunAtLoad": True,
+        "KeepAlive": {"SuccessfulExit": False},
+        "StandardOutPath": str(CONFIG_DIR / "listener.log"),
+        "StandardErrorPath": str(CONFIG_DIR / "listener.log"),
+        "ProcessType": "Background",
+    }))
+    subprocess.run(["launchctl", "bootstrap", domain, str(plist)], check=True)
+    print(f"listener installed: {plist}")
+
+
 def _music_replay(path: Path) -> None:
     """Print a clip's analysis as a compact timeline."""
 
@@ -150,7 +187,8 @@ def main() -> None:
     parser.add_argument("command", choices=["import", "serve", "status", "on", "off",
                                             "brightness", "white", "color", "effect",
                                             "music-probe", "music", "music-stop",
-                                            "music-record", "music-replay"])
+                                            "music-record", "music-replay", "listen",
+                                            "install-listener", "uninstall-listener"])
     parser.add_argument("values", nargs="*")
     parser.add_argument("--db", type=Path, help="amaran Desktop amaran.db (import)")
     parser.add_argument("--account", help="amaran account email or phone (import from the account)")
@@ -182,6 +220,11 @@ def main() -> None:
             print(asyncio.run(clips.record(seconds, name)))
         elif args.command == "music-replay":
             _music_replay(Path(args.values[0]))
+        elif args.command == "listen":
+            from .music.listener import listen
+            raise SystemExit(asyncio.run(listen()))
+        elif args.command in ("install-listener", "uninstall-listener"):
+            _launch_agent(args.command == "install-listener")
         elif args.command == "music-stop":
             from .music import control
             print("stopped" if control.stop() else "music mode was not running")
