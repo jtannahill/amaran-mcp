@@ -1,4 +1,5 @@
 # Publishes to PyPI when a GitHub release is published, by trusted publishing (no token).
+# Actions are pinned to commits; the comment beside each is its release.
 name: Publish to PyPI
 
 on:
@@ -14,7 +15,10 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
       - run: uv build
-      - run: uv publish --trusted-publishing always
+      # --check-url skips files PyPI already has, so a manual rerun of a released version is harmless.
+      - run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/
