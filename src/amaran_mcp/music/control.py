@@ -55,7 +55,18 @@ def status() -> dict | None:
     if not _alive(pid):
         PID_PATH.unlink(missing_ok=True)
         return None
-    return {"running": True, **(runner.status_of() or {}), "pid": pid}
+    music = {"running": True, **(runner.status_of() or {}), "pid": pid}
+    if music.get("recording"):
+        music["recorded_by"] = "music mode"
+    else:
+        # Music mode leaves recording to the background listener when it runs; say so.
+        from . import listener
+        background = listener.status()
+        if background:
+            music["recording"] = background.get("recording")
+            music["recording_stopped"] = background.get("recording_stopped")
+            music["recorded_by"] = "background listener"
+    return music
 
 
 def _spawn(argv: list[str]) -> int:
@@ -74,15 +85,17 @@ def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, re
     from . import listener
 
     runner.CONTROL_PATH.unlink(missing_ok=True)  # a new session starts at the mood's own range
+    recorded_by = "music mode" if record else None
     if listener.status():
         record = False  # the background listener records; never twice
+        recorded_by = "background listener"
     else:
         runner.MARKS_PATH.unlink(missing_ok=True)
     argv = [sys.executable, "-m", "amaran_mcp", "music", "--mood", mood]
     pid = spawn(argv if record else argv + ["--no-record"])
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     PID_PATH.write_text(f"{pid}\n")
-    return {"running": True, "pid": pid, "mood": mood, "recording": record}
+    return {"running": True, "pid": pid, "mood": mood, "recording": recorded_by is not None, "recorded_by": recorded_by}
 
 
 def mark(kind: str, note: str | None = None) -> dict:

@@ -67,4 +67,25 @@ def test_music_mode_leaves_recording_to_the_listener(listener, monkeypatch):
     monkeypatch.setattr(listener, "status", lambda: {"recording": None, "pid": 1})
     seen = []
     result = control.start("ethereal", spawn=lambda argv: seen.append(argv) or 7)
-    assert "--no-record" in seen[0] and result["recording"] is False
+    assert "--no-record" in seen[0]
+    assert result["recording"] is True and result["recorded_by"] == "background listener"
+
+
+def test_music_mode_records_itself_without_the_listener(listener, monkeypatch):
+    from amaran_mcp.music import control
+    importlib.reload(control)
+    monkeypatch.setattr(listener, "status", lambda: None)
+    seen = []
+    result = control.start("ethereal", spawn=lambda argv: seen.append(argv) or 7)
+    assert "--no-record" not in seen[0] and result["recorded_by"] == "music mode"
+
+
+def test_status_shows_the_listeners_recording(listener, monkeypatch):
+    from amaran_mcp.music import control, runner
+    importlib.reload(control)
+    monkeypatch.setattr(control, "_pid", lambda: 7)
+    monkeypatch.setattr(control, "_alive", lambda pid: True)
+    monkeypatch.setattr(runner, "status_of", lambda: {"state": "listening", "recording": None})
+    monkeypatch.setattr(listener, "status", lambda: {"recording": "/tmp/session", "recording_stopped": None, "pid": 1})
+    music = control.status()
+    assert music["recording"] == "/tmp/session" and music["recorded_by"] == "background listener"
