@@ -204,6 +204,18 @@ degrees a second, so it never flashes or pulses on the beat.
 | `deep` | Indigo, navy, magenta-violet |
 | `dawn` | Lavender, peach, gold, rose |
 
+### The same song twice
+
+The sections repeat; the colours repeat only when the Mac knows the song.
+
+| | Same on a second play? |
+|---|---|
+| Sections, blooms and when they land | Yes, within about a second. Music mode has no randomness and keeps time by the audio itself, but live capture lands on a slightly different grid each play, so a call that sits right at a threshold (the 2 s hold, the 4-bar kick test, a bloom) can occasionally flip |
+| The starting colour, with the song playing in the Music app | Yes. Each song starts on a palette stop chosen from a hash of its title and artist |
+| The colours, from any other source (AirPlay, a browser, SoundCloud, YouTube) | No. The groove's drift carries on from where the last track left it, so the same sections come in different colours |
+| The first 10 to 30 seconds | Not always. Tempo, key and level tracking carry over from the previous track |
+| The demo page | Always. It replays one fixed capture, so the light is identical on every play |
+
 Any other light command stops music mode, except brightness, which moves its
 range. Needs Xcode's command line tools (the audio helper is compiled on first
 run); macOS asks once for permission to record system audio.
@@ -296,6 +308,7 @@ Neither of these is built yet.
 | Plan | What it would do |
 |---|---|
 | **The body as well as the music** | Layer health wearable data on top of music mode: heart rate from an Apple Watch, strain and recovery from WHOOP. The music still sets the sections and the colour; the body modulates them to some degree, for example a calmer, lower drift as your heart rate settles, or a fuller drop when you are moving |
+| **Same song, same light** | Treat a stretch of silence, or a new title from the Music app, as a new song: reset the listening and the drift, and with no title pick the starting colour from the key of the opening bars. The same song would then give the same light within about a second at every boundary |
 | **More lights** | Several amaran lights at once: a key, fill and back light for interviews, set together from one prompt |
 | **Keep the shot lit** | Watch the camera through a take and hold the face's exposure and skin tone steady, nudging brightness and colour temperature as daylight shifts or the speaker moves |
 
