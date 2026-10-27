@@ -1,5 +1,7 @@
 """Music analysis on synthetic audio."""
 
+import numpy as np
+
 from amaran_mcp.music.analysis import Analyzer, merge_events
 from music_fixtures import (arrangement, feed_in_blocks, kick_track, make_features, pads_only, silence,
                             speech_like, speech_over, sub_bass_pads, bass_swell)
@@ -112,4 +114,25 @@ def test_model_cannot_force_an_impossible_section():
 def test_model_proposal_is_followed_when_allowed():
     a = Analyzer(RATE, model=StubModel("breakdown"))
     fs = feed_in_blocks(a, kick_track(RATE, 30))
+    assert fs[-1].section == "breakdown"
+
+
+class StubMelModel(StubModel):
+    input = "mel"
+
+    def __init__(self, section):
+        super().__init__(section)
+        self.shapes = []
+
+    def proba(self, x):
+        self.shapes.append(np.shape(x))
+        return super().proba(x)
+
+
+def test_spectrogram_model_gets_sixteen_seconds_of_mel():
+    from amaran_mcp.music import sections
+    stub = StubMelModel("breakdown")
+    a = Analyzer(RATE, model=stub)
+    fs = feed_in_blocks(a, kick_track(RATE, 30))
+    assert stub.shapes and set(stub.shapes) == {(sections.MEL_FRAMES, 64)}
     assert fs[-1].section == "breakdown"

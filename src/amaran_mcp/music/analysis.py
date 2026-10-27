@@ -18,6 +18,7 @@ import numpy as np
 
 from . import sections as section_model
 from .harmony import Harmony, HarmonyTracker
+from .mel import MelFrontend
 from .spectral import Spectral
 from .tempo import Beat, TempoTracker
 from .timbre import Timbre, TimbreTracker
@@ -107,6 +108,9 @@ class Analyzer:
         self._seconds = section_model.Seconds()
         self._spectral = Spectral(rate)
         self._spectral_row: np.ndarray | None = None
+        self._mel_input = getattr(model, "input", "features") == "mel"
+        self._mel = MelFrontend(rate) if self._mel_input else None
+        self._mel_frames: deque = deque(maxlen=section_model.MEL_FRAMES)
         self._history: deque = deque(maxlen=section_model.WINDOW_SECONDS)
         self._decoder = section_model.SectionDecoder()
         self._model_sure = False
@@ -225,7 +229,9 @@ class Analyzer:
                     beat: Beat, harmony: Harmony, timbre: Timbre, dt: float) -> bool:
         """Once a second, let the model move the section (within what is allowed)."""
 
-        # Both accumulators see every block, as in training, so their seconds line up.
+        # Every accumulator sees every block, as in training, so their seconds line up.
+        if self._mel is not None:
+            self._mel_frames.extend(self._mel.feed(samples))
         latest = self._spectral.feed(samples)
         if latest is not None:
             self._spectral_row = latest
@@ -241,8 +247,16 @@ class Analyzer:
             self._decoder.follow("groove")
             return False
         self._decoder.follow(self.section)
-        rows = np.array(self._history)
-        proba = self.model.proba(section_model.window(rows, len(rows) - 1))
+        if self._mel_input:
+            if not self._mel_frames:
+                return False
+            frames = np.array(self._mel_frames)
+            if len(frames) < section_model.MEL_FRAMES:  # padded at the start, as in training
+                frames = np.concatenate([np.repeat(frames[:1], section_model.MEL_FRAMES - len(frames), axis=0), frames])
+            proba = self.model.proba(frames)
+        else:
+            rows = np.array(self._history)
+            proba = self.model.proba(section_model.window(rows, len(rows) - 1))
         self._model_sure = max(proba.values()) >= section_model.CONFIDENT
         proposed = self._decoder.step(proba)
         if proposed != self.section:
