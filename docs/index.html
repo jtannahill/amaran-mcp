@@ -472,14 +472,25 @@
     return shownSpans.find(([a, b]) => t >= a && t < b) || heardSpans.find(([a, b]) => t >= a && t < b)
       || heardSpans[heardSpans.length - 1];
   }
-  // What the second row says near a moment, within `reach` seconds.
-  function secondAt(t, reach) {
+  // What the second row says near a moment, within `reach` seconds. After a jump from the
+  // table, `jumped` is where it landed (the earlier of the two calls): the section starting
+  // there or up to 10 s later, else a mark there, wins.
+  function secondAt(t, reach, jumped) {
     if (data.expert) {
       const who = data.expert.by === "claude" ? "Claude's reading" : "Human expert";
-      const near = data.expert.points.filter(([m]) => m <= t + 0.5 && t - m <= reach);
-      if (near.length) return `${who}: ${near[near.length - 1][1]} at ${fmt(near[near.length - 1][0])}`;
+      const spanText = (s) => `${who}: ${s[2]}, ${fmt(s[0])} to ${fmt(s[1])}`;
+      const markText = (m) => `${who}: ${m[1]} at ${fmt(m[0])}`;
       const span = data.expert.spans.find(([a, b]) => t >= a && t < b);
-      return span ? `${who}: ${span[2]}, ${fmt(span[0])} to ${fmt(span[1])}` : null;
+      if (jumped != null) {
+        const starts = data.expert.spans.find(([a]) => a >= jumped - 1 && a <= jumped + 10);
+        const mark = data.expert.points.find(([m]) => Math.abs(m - jumped) <= 1);
+        const said = starts || (mark ? null : span);
+        if (said) return spanText(said);
+        if (mark) return markText(mark);
+      }
+      const near = data.expert.points.filter(([m]) => m <= t + 0.5 && t - m <= reach);
+      if (near.length) return markText(near[near.length - 1]);
+      return span ? spanText(span) : null;
     }
     if (data.marks) {
       const before = data.marks.filter(([m]) => m <= t + 0.5 && t - m <= reach);
@@ -502,7 +513,7 @@
     $("clocksmall").textContent = `${fmt(position)} / ${fmt(data.duration)}`;
     const heard = heardAt(position);
     const heardText = heard[2] ? `Music mode: ${heard[2]} from ${fmt(heard[0])}.` : "Music mode: silence.";
-    const second = secondAt(position, 10);
+    const second = secondAt(position, 10, pinned != null && Math.abs(position - pinned) < 2 ? pinned : null);
     const unmarked = data.expert ? false : data.marks ? data.marks.length === 0
       : !data.experts.build.length && !data.experts.break.length && !data.experts.drop.length;
     readout.textContent = unmarked ? heardText : `${heardText} ${second ? second + "." : data.marks ? "No mark near here." : "Experts: nothing marked here."}`;
@@ -544,7 +555,10 @@
     playLabel.textContent = on ? "Pause" : "Play";
   }
 
-  function seek(t) {
+  // A jump from the table pins the readout to that row's moment until the track moves on.
+  let pinned = null;
+  function seek(t, fromTable = false) {
+    pinned = fromTable ? t : null;
     show(t);
     anchorPos = position; anchorAt = performance.now();
     if (player && player.ready) player.seek(position);
@@ -676,7 +690,7 @@
     $("moments").replaceChildren(...t.moments.map(([at, ...cells]) => {
       const row = document.createElement("tr"), jump = document.createElement("button");
       jump.type = "button"; jump.textContent = cells[0];
-      jump.addEventListener("click", () => { if (data) { seek(at); share(); } });
+      jump.addEventListener("click", () => { if (data) { seek(at, true); share(); } });
       row.append(...cells.map((text, k) => {
         const td = document.createElement("td");
         if (k === 0) td.append(jump); else td.textContent = text;
