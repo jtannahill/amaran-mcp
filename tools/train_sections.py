@@ -18,6 +18,7 @@ is no worse than the rules on the owner's labelled sessions when there are any.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -153,6 +154,8 @@ def main() -> None:
         print(f"fold {k + 1}: rules {r}  model {m}")
 
     rules_all, model_all = summarise(rules_results), summarise(model_results)
+    (args.features.expanduser() / "cv_results.json").write_text(
+        json.dumps({**model_all, "rules": rules_all}, indent=1))
     print(f"\nheld-out, pooled ({len(public)} tracks):")
     for key in rules_all:
         print(f"  {key:15} rules {rules_all[key]:.3f}   model {model_all[key]:.3f}")

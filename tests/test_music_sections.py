@@ -120,3 +120,19 @@ def test_pooled_boundary_score_does_not_reward_predicting_nothing():
     without = score_sections.score(["groove"] * 30, ["groove"] * 30, [], [])
     pooled = train_sections.summarise([with_build, without])
     assert pooled["build_f"] == 0.0  # per-track averaging would give 0.5
+
+
+def test_spectrogram_network_numpy_matches_torch():
+    import torch
+    import train_cnn
+    torch.manual_seed(0)
+    net = train_cnn.SectionNet(classes=["breakdown", "build", "climax", "groove"]).eval()
+    rng = np.random.default_rng(0)
+    windows = rng.normal(size=(3, sections.MEL_FRAMES, 64)).astype(np.float32) - 5
+    weights = train_cnn.export_cnn(net, level_mean=-5.0, level_scale=2.0)
+    model = sections.Model(weights)
+    ours = model.proba_batch(windows)
+    with torch.no_grad():
+        theirs = torch.softmax(net(torch.from_numpy(train_cnn.prepare(windows, -5.0, 2.0))), dim=1).numpy()
+    assert np.allclose(ours, theirs, atol=1e-5)
+    assert model.input == "mel"

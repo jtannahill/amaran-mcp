@@ -25,6 +25,28 @@ WINDOW_SECONDS = 16
 STATS = 5  # last value, mean, change over the window, standard deviation, max
 WINDOW_SIZE = STATS * ROW_WIDTH
 SECTIONS = ["intro", "groove", "breakdown", "build", "climax"]
+MEL_FRAMES = 160  # the spectrogram model's window: 16 s at 10 frames a second
+
+
+def prepare_mel(windows: np.ndarray, level_mean: float, level_scale: float) -> np.ndarray:
+    """Spectrogram windows (N, frames, mels) as the network's two input channels:
+    shape within the window (each band minus its window mean), and level."""
+
+    w = np.asarray(windows, dtype=np.float32)
+    shape = w - w.mean(axis=1, keepdims=True)
+    level = (w - level_mean) / level_scale
+    return np.stack([shape, level], axis=1)
+
+
+def _conv_relu_pool(x: np.ndarray, weight: np.ndarray, bias: np.ndarray) -> np.ndarray:
+    """3x3 convolution (padding 1), ReLU, 2x2 max pool: as the PyTorch network."""
+
+    padded = np.pad(x, ((0, 0), (0, 0), (1, 1), (1, 1)))
+    patches = np.lib.stride_tricks.sliding_window_view(padded, (3, 3), axis=(2, 3))
+    y = np.einsum("nchwij,ocij->nohw", patches, weight, optimize=True) + bias[None, :, None, None]
+    y = np.maximum(y, 0.0)
+    n, o, h, w = y.shape
+    return y[:, :, : h // 2 * 2, : w // 2 * 2].reshape(n, o, h // 2, 2, w // 2, 2).max(axis=(3, 5))
 
 
 def vector(features: Any) -> np.ndarray:
@@ -92,6 +114,11 @@ class Model:
     def __init__(self, weights: dict[str, np.ndarray]) -> None:
         self.classes = [str(c) for c in weights["classes"]]
         self.kind = str(weights.get("kind", "mlp"))
+        self.input = "mel" if self.kind == "cnn" else "features"
+        if self.kind == "cnn":
+            self.weights = weights
+            self.level_mean, self.level_scale = float(weights["level_mean"]), float(weights["level_scale"])
+            return
         if self.kind == "trees":
             self.baseline = weights["baseline"]
             self.feature, self.threshold = weights["feature"], weights["threshold"]
@@ -110,6 +137,17 @@ class Model:
     def proba_batch(self, X: np.ndarray) -> np.ndarray:
         """Probabilities, one row per input, columns in self.classes order."""
 
+        if self.kind == "cnn":
+            x = prepare_mel(X if np.ndim(X) == 3 else np.asarray(X)[None], self.level_mean, self.level_scale)
+            k = 0
+            while f"conv{k}_w" in self.weights:
+                x = _conv_relu_pool(x, self.weights[f"conv{k}_w"], self.weights[f"conv{k}_b"])
+                k += 1
+            h = x.mean(axis=3).reshape(len(x), -1)
+            h = np.maximum(h @ self.weights["fc0_w"].T + self.weights["fc0_b"], 0.0)
+            z = h @ self.weights["fc1_w"].T + self.weights["fc1_b"]
+            z = np.exp(z - z.max(axis=1, keepdims=True))
+            return z / z.sum(axis=1, keepdims=True)
         X = np.atleast_2d(np.asarray(X, dtype=np.float64))
         if self.kind == "trees":
             raw = np.tile(self.baseline, (len(X), 1))
