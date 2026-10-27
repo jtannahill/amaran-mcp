@@ -157,24 +157,25 @@ def missyou(theme: dict, narrow: bool) -> str:
         out.append(f'<text x="{left - 12}" y="{row2 + 10}" font-size="12" text-anchor="end" class="ink">Human expert</text>')
     else:
         out.append(f'<text x="{left}" y="{row1 - 8}" font-size="12" class="ink">Music mode heard</text>')
-        out.append(f'<text x="{left}" y="{row2 - 8}" font-size="12" class="ink">Human expert marked</text>')
+        out.append(f'<text x="{left}" y="{row2 - 8}" font-size="12" class="ink">Human expert, best reading</text>')
     for a, b, name in spans:
         if name not in names:
             continue
         mid = colours[min(len(colours) - 1, int((a + b) / 2 * 10))]
         out.append(f'<rect x="{x(a):.1f}" y="{row1}" width="{max(2, x(b) - x(a) - 2):.1f}" height="12" rx="3" fill="{light(mid)}"/>')
-        if x(b) - x(a) > 70:
+        if x(b) - x(a) > 45:
             out.append(f'<text x="{x(a):.1f}" y="{row1 + 28}" font-size="12">{names[name]}</text>')
     blooms = [f[0] for f in frames if f[5]]
     for t in [b for i, b in enumerate(blooms) if i == 0 or b - blooms[i - 1] > 4]:
         out.append(f'<rect x="{x(t) - 1:.1f}" y="{row1 - 5}" width="2" height="22" rx="1" fill="{theme["tick"]}"/>')
-    for t, label in data["marks"]:
-        out.append(f'<rect x="{x(t) - 1:.1f}" y="{row2}" width="2" height="14" rx="1" fill="{theme["soft"]}"/>')
-    # Name only the expert's climaxes that a drop music mode heard lands on (within 3 s).
-    drops = [a for a, _, name in spans if name == "climax"]
-    for t, label in data["marks"]:
-        if label == "Climax" and any(abs(d - t) <= 3 for d in drops):
-            out.append(f'<text x="{x(t) - 1:.1f}" y="{row2 + 30}" font-size="12">Climax {int(t // 60)}:{int(t % 60):02d}, matched</text>')
+    # The human expert's marks, read into sections (data["expert"]): neutral spans, named moments as ticks.
+    expert = data["expert"]
+    for a, b, label in expert["spans"]:
+        out.append(f'<rect x="{x(a):.1f}" y="{row2}" width="{max(2, x(b) - x(a) - 2):.1f}" height="12" rx="3" fill="{theme["rest"]}"/>')
+        if x(b) - x(a) > 45:
+            out.append(f'<text x="{x(a):.1f}" y="{row2 + 28}" font-size="12">{label}</text>')
+    for t, _ in expert["points"]:
+        out.append(f'<rect x="{x(t) - 1:.1f}" y="{row2 - 5}" width="2" height="22" rx="1" fill="{theme["soft"]}"/>')
     for m in range(0, int(dur // 60) + 1):
         out.append(f'<text x="{x(m * 60):.1f}" y="{height_of(narrow) - 8}" font-size="11" class="muted">{m}:00</text>')
     return svg(width, height_of(narrow), "".join(out), theme, "Miss You: the light, music mode's sections and the human expert's marks")

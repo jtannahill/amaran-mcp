@@ -269,9 +269,9 @@
 (() => {
   const TRACKS = {
     missyou: {
-      soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (live while listening, a few seconds late)",
+      soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (a best reading of live marks made while listening)",
       name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You",
-      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; those marks were carried onto this full 5:05 version by matching the two recordings, and the light was computed from a silent capture of this exact upload. Music mode's drop at 3:24 lands on the climax they called, to the second, and it opens out at 1:17 where they called the first climax. Through the long breakdown it blooms at 2:23 and 2:37, before the lifts they called from 2:48, and two of their lifts fall where it hears a drop.",
+      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end. Against that reading, music mode hears the breakdown from 2:13 almost exactly (it blooms at 2:23 and 2:37), the build into the last drop from 2:44, four seconds early, and the drop at 3:24 to the second. It misses the first build, hearing groove until the drop at 1:17, and it holds the last drop until 4:55, where the expert hears the outro from 4:00.",
     },
     throughitall: {
       youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Human expert marked (not marked yet)",
@@ -382,7 +382,10 @@
       .filter((t, i, all) => i === 0 || t - all[i - 1] > 4);  // one tick per bloom
     drawLane($("heard"), shown, [], blooms, true);
     expertSpans = [];
-    if (data.marks) {
+    if (data.expert) {
+      expertSpans = data.expert.spans.slice();
+      drawLane($("experts"), expertSpans, data.expert.points.map((m) => m[0]), [], false);
+    } else if (data.marks) {
       drawLane($("experts"), [], data.marks.map((m) => m[0]), [], false);
     } else {
       for (const [a, b] of data.experts.build) expertSpans.push([a, b, "Build"]);
@@ -397,6 +400,12 @@
   }
   // What the second row says near a moment, within `reach` seconds.
   function secondAt(t, reach) {
+    if (data.expert) {
+      const near = data.expert.points.filter(([m]) => m <= t + 0.5 && t - m <= reach);
+      if (near.length) return `Human expert: ${near[near.length - 1][1]} at ${fmt(near[near.length - 1][0])}`;
+      const span = data.expert.spans.find(([a, b]) => t >= a && t < b);
+      return span ? `Human expert: ${span[2]}, ${fmt(span[0])} to ${fmt(span[1])}` : null;
+    }
     if (data.marks) {
       const before = data.marks.filter(([m]) => m <= t + 0.5 && t - m <= reach);
       return before.length ? `Human expert: ${before[before.length - 1][1]} at ${fmt(before[before.length - 1][0])}` : null;
@@ -418,7 +427,7 @@
     const heard = heardAt(position);
     const heardText = heard[2] ? `Music mode: ${heard[2]} from ${fmt(heard[0])}.` : "Music mode: silence.";
     const second = secondAt(position, 10);
-    const unmarked = data.marks ? data.marks.length === 0
+    const unmarked = data.expert ? false : data.marks ? data.marks.length === 0
       : !data.experts.build.length && !data.experts.break.length && !data.experts.drop.length;
     readout.textContent = unmarked ? heardText : `${heardText} ${second ? second + "." : data.marks ? "No mark near here." : "Experts: nothing marked here."}`;
     timeline.setAttribute("aria-valuenow", Math.round(position));
@@ -525,7 +534,7 @@
     const failed = setTimeout(() => { if (!p.ready) note.textContent = "The SoundCloud player did not answer, so this plays without sound."; }, 8000);
     w.bind(SC.Widget.Events.READY, () => {
       clearTimeout(failed); p.ready = true;
-      note.textContent = "Sound comes from SoundCloud. Turn it up.";
+      note.textContent = "The music plays through SoundCloud's player below.";
       w.bind(SC.Widget.Events.PLAY, () => setPlaying(true));
       w.bind(SC.Widget.Events.PAUSE, () => setPlaying(false));
       w.bind(SC.Widget.Events.FINISH, () => setPlaying(false));
@@ -557,7 +566,7 @@
       const y = new YT.Player(holder, {
         videoId: id, width: "100%", playerVars: { rel: 0, playsinline: 1 },
         events: {
-          onReady: () => { clearTimeout(failed); p.ready = true; note.textContent = "Sound comes from YouTube. Turn it up."; },
+          onReady: () => { clearTimeout(failed); p.ready = true; note.textContent = "The music plays through YouTube's player below."; },
           onStateChange: (e) => {
             if (e.data === YT.PlayerState.PLAYING) { position = y.getCurrentTime(); setPlaying(true); }
             if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) setPlaying(false);

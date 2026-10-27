@@ -339,7 +339,7 @@ late. Those marks are the human expert row below.
   <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="figures/missyou-narrow-dark.svg">
   <source media="(max-width: 600px)" srcset="figures/missyou-narrow-light.svg">
   <source media="(prefers-color-scheme: dark)" srcset="figures/missyou-wide-dark.svg">
-  <img alt="A colour band for the whole of Miss You, with the sections music mode heard below it (drops at 1:17, 1:50 and 3:24, a breakdown at 2:13 with two blooms, a build at 2:44) and the human expert's 20 marks as ticks; the climaxes at 1:15 and 3:24 line up with music mode's drops." src="figures/missyou-wide-light.svg">
+  <img alt="A colour band for the whole of Miss You, with the sections music mode heard below it (drops at 1:17, 1:50 and 3:24, a breakdown at 2:13 with two blooms, a build at 2:44) and the human expert's marks read into sections (build, drop, breakdown, build, drop, outro) with the named moments as ticks." src="figures/missyou-wide-light.svg">
 </picture>
 
 How the comparison was made, so both rows describe the same audio:
@@ -357,16 +357,26 @@ How the comparison was made, so both rows describe the same audio:
    (`tools/demo_timeline.py`): Apple's classifier, the analyser with the
    shipped model, and every mood's renderer.
 
-| The human expert called | Music mode heard | |
-|---|---|---|
-| Climax at 1:15 | Drop at 1:17 | Agrees |
-| Climax at 3:24 | Drop at 3:24 | Agrees, to the second |
-| Lifts from 2:48 to 3:16 | Breakdown from 2:13, blooms at 2:23 and 2:37 | Blooms come early |
-| Lifts at 1:47 and 2:01 | Drops at 1:50 and 2:04 | Disagree |
-| Builds at 0:17 and 0:48 | Groove | Missed |
+The raw marks are noisy in the way live typing is: the same moment called
+twice, a lift called during a drop, no mark for a breakdown that is plainly
+there. They were read into sections the way an expert annotation is written,
+each with a start and an end, plus the named moments: the vocal entering at
+0:17, two lifts in the first drop, four lifts through the build into the last
+drop, and the peak at 3:37. The breakdown span is the one reading that rests
+on the gap in the marks and the audio rather than on a mark.
 
-Drops agree; the breakdown's lifts are where music mode is early or wrong,
-which is the part the owner cares about most. The owner also used words the
+| Human expert, best reading | Music mode heard | |
+|---|---|---|
+| Build 0:48 to 1:15 | Groove | Missed |
+| Drop 1:15 to 2:13 | Drop from 1:17 | Agrees, 2 s late |
+| Breakdown 2:13 to 2:48 | Breakdown from 2:13, blooms at 2:23 and 2:37 | Agrees |
+| Build 2:48 to 3:24 | Build from 2:44 | Agrees, 4 s early |
+| Drop 3:24 to 4:00 | Drop at 3:24 | Agrees, to the second |
+| Outro from 4:00 | Drop until 4:55 | Late |
+
+Read this way, music mode agrees on the breakdown, the build into the last
+drop and both drops; it misses the first build and holds the last drop well
+past the outro. The owner also used words the
 model has no class for, "crescendo" and "top of the climax", which suggests
 the drop needs a rising part and a peak. This is the first session for the
 local, trance-only model.
@@ -522,6 +532,7 @@ uv run python tools/make_ensemble.py --trees src/amaran_mcp/music/sections.npz -
 uv run python tools/capture_app.py track.wav --seconds 330 --mute
 uv run python tools/align_versions.py cut.wav track.wav --marks marks.json --start SECONDS --out full-marks.json
 uv run python tools/demo_timeline.py track.wav --marks full-marks.json --out docs/missyou.json
+# The expert reading in docs/missyou.json ("expert": spans and points) is written by hand from the marks.
 uv run python tools/demo_hero.py docs/missyou.json docs --still 150
 uv run python tools/research_figures.py --out docs/figures
 ```
