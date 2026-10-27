@@ -42,7 +42,8 @@ out at the drop. It never flashes; colour can only change so fast.
 Lighting a talking head well is fiddly in the other direction: white balance,
 tint and level, set by hand and lost by the next call. Here you describe the
 shot, or show Claude a photo of the set, and it sets the light; a scene brings
-the same look back tomorrow.
+the same look back tomorrow. Alone in frame, you can say the change out loud
+instead of getting up to make it.
 
 Everything runs on the Mac: the audio never leaves it, and the light is
 reached through amaran Desktop or directly over Bluetooth.
@@ -54,6 +55,7 @@ reached through amaran Desktop or directly over Bluetooth.
 | Listening to a trance or house set at your desk, with the light in view | Music mode (`ethereal`, `deep` or `dawn`) | The room moves with the track's sections, not its kick drum |
 | Streaming or recording with music playing on the Mac | Music mode | It follows whatever the Mac plays, AirPlay from an iPhone included |
 | On a video call, recording a talking head or a corporate interview | Studio lighting from a prompt | White light matched to the camera, no colour on the face |
+| Hosting a show or recording alone, in frame at the Mac | Voice commands to Claude | Look at the monitor, say the change, stay in your seat |
 | Setting up the same shot again | `save_scene`, then `recall_scene` | One name brings back colour temperature, tint and level |
 | Wanting it to learn your music | The background listener and `mark` | Your own sessions become training data, kept on your Mac |
 
@@ -101,6 +103,7 @@ amaran account (the password is asked for and never stored; untested).
 | "Corporate interview, camera at 5600K, soft and a touch warm" | White light at the right temperature and level |
 | "Here's a photo of my set, light my face for a webcam talk" | Claude reads the photo and sets white balance and level |
 | "Save this as interview A" / "recall interview A" | The look is kept and brought back |
+| "Warmer, and down ten percent", said aloud while on camera | The same tools, by voice ([hands free](#hands-free-on-camera)) |
 | "Warm white at 40 percent" or "a slow violet" | Direct control, as with any light |
 
 The same works from the terminal (`uv run amaran-mcp music --mood deep`, and
@@ -242,6 +245,25 @@ Claude reads a photo of the set the way it reads any picture, so it can see
 the window, the room's colour and where the light sits, and pick the white
 balance and level from that. Today that is one light; a key, fill and back
 light setup is planned as more amaran lights join.
+
+### Hands free, on camera
+
+Working solo, the light is out of reach once you are in frame: hosting a show
+alone, or recording a video from the Mac in front of you. Speak to Claude
+instead, through the Mac's Dictation or the voice input of the Claude app you
+use, and the light changes while you keep your eyes on the monitor and stay in
+place:
+
+> "Warmer, and down ten percent."
+
+> "The sun's gone in. Bring the level up to match."
+
+> "Recall interview A."
+
+Each command is an ordinary tool call, so it takes the moment Claude needs to
+reply: call changes between takes or segments rather than mid-sentence. On a
+live show the microphone hears the command too, so mute it for the cue or keep
+cues to the breaks.
 
 ## Tools
 
