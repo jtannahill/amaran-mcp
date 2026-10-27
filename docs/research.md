@@ -53,6 +53,31 @@ with no flashing and no pulse on every beat. The moment that matters most is
 the breakdown, "when the chords lift and the vocal comes in",
 where the light should bloom.
 
+### The listening history behind it
+
+To decide which music to build for, I queried my Apple Music listening history
+back to 2008 and analysed the whole panel for genre: 43,463 plays across 3,865
+tracks, counting each track's plays under the genre Apple Music tags it with.
+
+| Genre | Plays | Share of tagged plays |
+|---|---|---|
+| Dance | 8,306 | 22.4% |
+| Electronic | 7,401 | 19.9% |
+| Trance | 3,499 | 9.4% |
+| Classical | 2,946 | 7.9% |
+| Rock | 2,576 | 6.9% |
+| House | 1,701 | 4.6% |
+| Alternative | 1,691 | 4.6% |
+| Pop | 1,065 | 2.9% |
+| Everything else | 7,966 | 21.4% |
+
+6,312 plays (14.5%) carry no genre and are left out of the shares. Dance,
+electronic, trance, house and dubstep together make up 58% of tagged plays,
+and trance alone is the third-largest genre. The trance is mostly long-form:
+episodes of Future Sound of Egypt and Find Your Harmony sit in the library
+next to vocal trance playlists. That is why music mode is tuned for vocal
+trance and its breakdowns rather than for pop or rock songs.
+
 ## How trance is built
 
 - **A journey, not a loop.** Intro, theme, a long soft breakdown with the
