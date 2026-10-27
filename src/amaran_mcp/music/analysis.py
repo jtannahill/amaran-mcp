@@ -18,6 +18,7 @@ import numpy as np
 
 from . import sections as section_model
 from .harmony import Harmony, HarmonyTracker
+from .spectral import Spectral
 from .tempo import Beat, TempoTracker
 from .timbre import Timbre, TimbreTracker
 
@@ -104,6 +105,8 @@ class Analyzer:
         # second; the state machine still decides what is musically allowed.
         self.model = model
         self._seconds = section_model.Seconds()
+        self._spectral = Spectral(rate)
+        self._spectral_row: np.ndarray | None = None
         self._history: deque = deque(maxlen=section_model.WINDOW_SECONDS)
         self._decoder = section_model.SectionDecoder()
         self._model_sure = False
@@ -201,7 +204,7 @@ class Analyzer:
 
         release = self._sections(dt, level, bass_now, bass_ref, share, pulsing, relative_energy, timbre, beat)
         if self.model is not None:
-            release = self._model_step(release, relative_energy, bass_now, bass_ref, beat, harmony, timbre, dt, n) or release
+            release = self._model_step(samples, release, relative_energy, bass_now, bass_ref, beat, harmony, timbre, dt) or release
         bloom = harmony.lift and self.section == "breakdown"
 
         return Features(
@@ -218,20 +221,26 @@ class Analyzer:
             timbre=timbre,
         )
 
-    def _model_step(self, release: bool, energy: float, bass_now: float, bass_ref: float, beat: Beat,
-                    harmony: Harmony, timbre: Timbre, dt: float, n: int) -> bool:
+    def _model_step(self, samples: np.ndarray, release: bool, energy: float, bass_now: float, bass_ref: float,
+                    beat: Beat, harmony: Harmony, timbre: Timbre, dt: float) -> bool:
         """Once a second, let the model move the section (within what is allowed)."""
 
-        if self.section in ("silence", "intro") or not self.is_music:
-            self._decoder.follow("groove")
-            return False
-        self._decoder.follow(self.section)
+        # Both accumulators see every block, as in training, so their seconds line up.
+        latest = self._spectral.feed(samples)
+        if latest is not None:
+            self._spectral_row = latest
         tick = Features(energy, min(1.0, 0.5 * bass_now / bass_ref) if bass_ref else 0.0, self.is_music,
                         False, self.section, 0.0, release, False, beat, harmony, timbre)
         row = self._seconds.add(section_model.vector(tick), dt)
         if row is None:
             return False
-        self._history.append(row)
+        spectral = self._spectral_row if self._spectral_row is not None else np.zeros(Spectral.WIDTH, np.float32)
+        self._spectral_row = None
+        self._history.append(np.concatenate([row, spectral]))
+        if self.section in ("silence", "intro") or not self.is_music:
+            self._decoder.follow("groove")
+            return False
+        self._decoder.follow(self.section)
         rows = np.array(self._history)
         proba = self.model.proba(section_model.window(rows, len(rows) - 1))
         self._model_sure = max(proba.values()) >= section_model.CONFIDENT

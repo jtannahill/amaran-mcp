@@ -42,11 +42,14 @@ def classes_for(path: Path) -> list[tuple[float, dict]]:
 def analyse(path: Path) -> dict[str, np.ndarray]:
     from amaran_mcp.music import sections
     from amaran_mcp.music.analysis import Analyzer
+    from amaran_mcp.music.spectral import Spectral
 
     samples = decode(path)
     classes = classes_for(path)
     analyzer = Analyzer(RATE)
     seconds = sections.Seconds()
+    spectral = Spectral(RATE)
+    spectral_row = None
     vectors, rules, releases, bpms = [], [], [], []
     k = 0
     current = None
@@ -55,14 +58,21 @@ def analyse(path: Path) -> dict[str, np.ndarray]:
         while k < len(classes) and classes[k][0] + 1.5 <= t:  # a window's result is known at its end
             current = classes[k][1]
             k += 1
-        f = analyzer.feed(samples[start : start + BLOCK], current)
+        block = samples[start : start + BLOCK]
+        f = analyzer.feed(block, current)
+        latest = spectral.feed(block)  # every block, so both accumulators close the same second
+        if latest is not None:
+            spectral_row = latest
         if f.release:
             releases.append(t)
         if f.beat.bpm:
             bpms.append(f.beat.bpm)
         row = seconds.add(sections.vector(f), BLOCK / RATE)
         if row is not None:
-            vectors.append(row)
+            if spectral_row is None:  # the two accumulators close the same block
+                spectral_row = np.zeros(Spectral.WIDTH, np.float32)
+            vectors.append(np.concatenate([row, spectral_row]))
+            spectral_row = None
             rules.append(f.section)
     return {
         "vectors": np.array(vectors, dtype=np.float32),

@@ -18,9 +18,12 @@ FEATURES = [
     "tension", "openness", "balance", "harmony_confidence", "chord_change",
     "vocal", "singing", "speech", "level",
 ]
+# The spectral summary (music/spectral.py) is appended to each second's row.
+SPECTRAL = [f"band{i}" for i in range(8)] + ["flux", "flatness", "centroid"]
+ROW_WIDTH = len(FEATURES) + len(SPECTRAL)
 WINDOW_SECONDS = 16
 STATS = 5  # last value, mean, change over the window, standard deviation, max
-WINDOW_SIZE = STATS * len(FEATURES)
+WINDOW_SIZE = STATS * ROW_WIDTH
 SECTIONS = ["intro", "groove", "breakdown", "build", "climax"]
 
 
@@ -80,16 +83,55 @@ def window(seconds: np.ndarray, i: int) -> np.ndarray:
 
 
 class Model:
-    """A small multilayer perceptron, run in numpy (trained by tools/train_sections.py)."""
+    """The trained section model, run in numpy (trained by tools/train_sections.py).
+
+    Either gradient-boosted trees (weights["kind"] == "trees") or a small
+    multilayer perceptron.
+    """
 
     def __init__(self, weights: dict[str, np.ndarray]) -> None:
+        self.classes = [str(c) for c in weights["classes"]]
+        self.kind = str(weights.get("kind", "mlp"))
+        if self.kind == "trees":
+            self.baseline = weights["baseline"]
+            self.feature, self.threshold = weights["feature"], weights["threshold"]
+            self.left, self.right = weights["left"], weights["right"]
+            self.leaf, self.value = weights["leaf"], weights["value"]
+            self.roots, self.tree_class = weights["roots"], weights["tree_class"]
+            self.depth = int(weights["depth"])
+            return
         self.means, self.scales = weights["means"], weights["scales"]
         self.layers = []
         k = 0
         while f"W{k}" in weights:
             self.layers.append((weights[f"W{k}"], weights[f"b{k}"]))
             k += 1
-        self.classes = [str(c) for c in weights["classes"]]
+
+    def proba_batch(self, X: np.ndarray) -> np.ndarray:
+        """Probabilities, one row per input, columns in self.classes order."""
+
+        X = np.atleast_2d(np.asarray(X, dtype=np.float64))
+        if self.kind == "trees":
+            raw = np.tile(self.baseline, (len(X), 1))
+            rows = np.arange(len(X))
+            for root, cls in zip(self.roots, self.tree_class):
+                node = np.full(len(X), root)
+                for _ in range(self.depth):
+                    leaf = self.leaf[node]
+                    if leaf.all():
+                        break
+                    go_left = X[rows, self.feature[node]] <= self.threshold[node]
+                    node = np.where(leaf, node, np.where(go_left, self.left[node], self.right[node]))
+                raw[:, cls] += self.value[node]
+            z = raw
+        else:
+            h = (X - self.means) / self.scales
+            for W, b in self.layers[:-1]:
+                h = np.maximum(0.0, h @ W + b)  # ReLU, as scikit-learn's MLPClassifier
+            W, b = self.layers[-1]
+            z = h @ W + b
+        z = np.exp(z - z.max(axis=1, keepdims=True))
+        return z / z.sum(axis=1, keepdims=True)
 
     @classmethod
     def load(cls, path: Path) -> "Model | None":
@@ -100,14 +142,7 @@ class Model:
             return None
 
     def proba(self, x: np.ndarray) -> dict[str, float]:
-        h = (np.asarray(x, dtype=np.float64) - self.means) / self.scales
-        for W, b in self.layers[:-1]:
-            h = np.maximum(0.0, h @ W + b)  # ReLU, as scikit-learn's MLPClassifier
-        W, b = self.layers[-1]
-        z = h @ W + b
-        z = np.exp(z - z.max())
-        p = z / z.sum()
-        return {c: float(v) for c, v in zip(self.classes, p)}
+        return {c: float(v) for c, v in zip(self.classes, self.proba_batch(x)[0])}
 
 
 # Which section may follow which: the model proposes, the music decides.

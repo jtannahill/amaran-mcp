@@ -41,6 +41,40 @@ def export(clf, means: np.ndarray, scales: np.ndarray) -> dict[str, np.ndarray]:
     return weights
 
 
+def export_trees(clf) -> dict[str, np.ndarray]:
+    """A fitted HistGradientBoostingClassifier as flat numpy arrays.
+
+    Reads scikit-learn's fitted trees (_predictors, _baseline_prediction): pin
+    the scikit-learn version this is trained with.
+    """
+
+    feature, threshold, left, right, leaf, value, roots, tree_class = [], [], [], [], [], [], [], []
+    depth = 0
+    offset = 0
+    binary = len(clf.classes_) == 2
+    for iteration in clf._predictors:
+        for k, tree in enumerate(iteration):
+            nodes = tree.nodes
+            roots.append(offset)
+            tree_class.append(1 if binary else k)
+            feature.append(nodes["feature_idx"].astype(np.int64))
+            threshold.append(nodes["num_threshold"].astype(np.float64))
+            left.append(nodes["left"].astype(np.int64) + offset)
+            right.append(nodes["right"].astype(np.int64) + offset)
+            leaf.append(nodes["is_leaf"].astype(bool))
+            value.append(nodes["value"].astype(np.float64))
+            depth = max(depth, int(nodes["depth"].max()) + 1)
+            offset += len(nodes)
+    baseline = np.asarray(clf._baseline_prediction, dtype=np.float64).ravel()
+    if binary:
+        baseline = np.array([0.0, baseline[0]])
+    return {"kind": np.array("trees"), "classes": np.array([str(c) for c in clf.classes_]),
+            "baseline": baseline, "feature": np.concatenate(feature), "threshold": np.concatenate(threshold),
+            "left": np.concatenate(left), "right": np.concatenate(right), "leaf": np.concatenate(leaf),
+            "value": np.concatenate(value), "roots": np.array(roots), "tree_class": np.array(tree_class),
+            "depth": np.array(depth)}
+
+
 def load(directory: Path) -> list[dict]:
     tracks = []
     for path in sorted(directory.glob("*.npz")):
@@ -57,8 +91,9 @@ def load(directory: Path) -> list[dict]:
 def decode(model: sections.Model, X: np.ndarray) -> tuple[list[str], list[float]]:
     decoder = sections.SectionDecoder()
     out, releases = [], []
-    for i, x in enumerate(X):
-        out.append(decoder.step(model.proba(x)))
+    probabilities = model.proba_batch(X)
+    for i, row in enumerate(probabilities):
+        out.append(decoder.step(dict(zip(model.classes, row))))
         if decoder.released:
             releases.append(float(i))
     return out, releases
@@ -75,19 +110,16 @@ def summarise(results: list[dict]) -> dict[str, float]:
 
 
 def fit(tracks: list[dict], seed: int = 0):
-    from sklearn.neural_network import MLPClassifier
+    """Gradient-boosted trees, sections balanced (otherwise the model answers groove)."""
+
+    from sklearn.ensemble import HistGradientBoostingClassifier
 
     X = np.concatenate([t["X"] for t in tracks])
     y = np.concatenate([t["y"] for t in tracks])
-    means, scales = X.mean(axis=0), X.std(axis=0) + 1e-6
-    # Balance the sections: otherwise the model learns to answer groove.
-    rng = np.random.default_rng(seed)
-    classes, counts = np.unique(y, return_counts=True)
-    idx = np.concatenate([rng.choice(np.nonzero(y == c)[0], counts.max(), replace=True) for c in classes])
-    X, y = X[idx], y[idx]
-    clf = MLPClassifier(hidden_layer_sizes=(32, 32), alpha=1e-3, max_iter=200, early_stopping=True,
-                        random_state=seed).fit((X - means) / scales, y)
-    return sections.Model(export(clf, means, scales)), export(clf, means, scales)
+    clf = HistGradientBoostingClassifier(class_weight="balanced", max_iter=200, learning_rate=0.1,
+                                         max_leaf_nodes=31, l2_regularization=1.0, random_state=seed).fit(X, y)
+    weights = export_trees(clf)
+    return sections.Model(weights), weights
 
 
 def main() -> None:

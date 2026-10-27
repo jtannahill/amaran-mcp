@@ -21,10 +21,10 @@ def test_vector_has_one_value_per_feature_in_order():
 
 
 def test_window_is_causal_and_documented_length():
-    seq = np.arange(30 * len(sections.FEATURES), dtype=float).reshape(30, len(sections.FEATURES))
+    seq = np.arange(30 * sections.ROW_WIDTH, dtype=float).reshape(30, sections.ROW_WIDTH)
     w = sections.window(seq, 20)
     assert w.shape == (sections.WINDOW_SIZE,)
-    n = len(sections.FEATURES)
+    n = sections.ROW_WIDTH
     assert np.allclose(w[:n], seq[20])                       # last value
     assert np.allclose(w[n : 2 * n], seq[5:21].mean(axis=0))  # mean over the last 16 s
     assert np.allclose(w[2 * n : 3 * n], seq[20] - seq[5])    # change over the window
@@ -94,3 +94,20 @@ def test_groove_may_go_straight_to_climax_without_a_release():
     climax = {"groove": 0.05, "breakdown": 0.05, "build": 0.0, "climax": 0.9}
     seq = [d.step(climax) for _ in range(3)]
     assert seq[-1] == "climax" and not d.released
+
+
+
+def test_tree_export_matches_scikit_learn():
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    import train_sections
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(400, 10))
+    y = np.array(["groove", "breakdown", "build", "climax"])[(X[:, 0] > 0).astype(int) + 2 * (X[:, 1] > 0.5)]
+    clf = HistGradientBoostingClassifier(max_iter=30, random_state=0).fit(X, y)
+    model = sections.Model(train_sections.export_trees(clf))
+    ours = model.proba_batch(X[:50])
+    theirs = clf.predict_proba(X[:50])
+    order = [model.classes.index(c) for c in clf.classes_]
+    assert np.allclose(ours[:, order], theirs, atol=1e-6)
+    single = model.proba(X[0])
+    assert abs(single[clf.classes_[0]] - theirs[0, 0]) < 1e-6
