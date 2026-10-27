@@ -16,6 +16,7 @@ import math
 
 import numpy as np
 
+from . import sections as section_model
 from .harmony import Harmony, HarmonyTracker
 from .tempo import Beat, TempoTracker
 from .timbre import Timbre, TimbreTracker
@@ -97,8 +98,15 @@ class _Follower:
 
 
 class Analyzer:
-    def __init__(self, rate: int) -> None:
+    def __init__(self, rate: int, model: "section_model.Model | None" = None) -> None:
         self.rate = rate
+        # A trained section model, when present, proposes sections once a
+        # second; the state machine still decides what is musically allowed.
+        self.model = model
+        self._seconds = section_model.Seconds()
+        self._history: deque = deque(maxlen=section_model.WINDOW_SECONDS)
+        self._decoder = section_model.SectionDecoder()
+        self._model_sure = False
         self.tempo = TempoTracker(rate)
         self.harmony = HarmonyTracker(rate)
         self.timbre = TimbreTracker(rate)
@@ -192,6 +200,8 @@ class Analyzer:
         relative_energy = min(1.0, max(0.0, 0.5 * energy / reference)) if reference else 0.0
 
         release = self._sections(dt, level, bass_now, bass_ref, share, pulsing, relative_energy, timbre, beat)
+        if self.model is not None:
+            release = self._model_step(release, relative_energy, bass_now, bass_ref, beat, harmony, timbre, dt, n) or release
         bloom = harmony.lift and self.section == "breakdown"
 
         return Features(
@@ -207,6 +217,31 @@ class Analyzer:
             harmony=harmony,
             timbre=timbre,
         )
+
+    def _model_step(self, release: bool, energy: float, bass_now: float, bass_ref: float, beat: Beat,
+                    harmony: Harmony, timbre: Timbre, dt: float, n: int) -> bool:
+        """Once a second, let the model move the section (within what is allowed)."""
+
+        if self.section in ("silence",) or not self.is_music:
+            self._decoder.follow("groove")
+            return False
+        self._decoder.follow(self.section)
+        tick = Features(energy, min(1.0, 0.5 * bass_now / bass_ref) if bass_ref else 0.0, self.is_music,
+                        False, self.section, 0.0, release, False, beat, harmony, timbre)
+        row = self._seconds.add(section_model.vector(tick), dt)
+        if row is None:
+            return False
+        self._history.append(row)
+        rows = np.array(self._history)
+        proba = self.model.proba(section_model.window(rows, len(rows) - 1))
+        self._model_sure = max(proba.values()) >= section_model.CONFIDENT
+        proposed = self._decoder.step(proba)
+        if proposed != self.section:
+            self._enter(proposed)
+            if self._decoder.released:
+                self._calm_time = self._no_kick_time = 0.0
+                return True
+        return False
 
     def _sections(self, dt: float, level: float, bass_now: float, bass_ref: float, share: float,
                   pulsing: bool, energy: float, timbre: Timbre, beat: Beat) -> bool:
@@ -236,6 +271,16 @@ class Analyzer:
         self._build_time = self._build_time + dt if rising else 0.0
 
         section = self.section
+        if self.model is not None and self._model_sure and section != "silence":
+            # The model owns section changes while it is sure; the fast release
+            # (a kick slamming back) still applies, it is quicker than a second.
+            if section in ("breakdown", "build"):
+                bass_back = bass_ref and bass_now > RELEASE_LEVEL * bass_ref
+                if beat.onset_jump >= RELEASE_JUMP and self._pulse_cv >= RELEASE_PULSE and bass_back:
+                    self._enter("climax")
+                    self._calm_time = self._no_kick_time = 0.0
+                    return True
+            return False
         if section == "silence":
             self._enter("groove" if self._kick_time >= KICK_ARRIVES else "intro")
         elif section == "intro":

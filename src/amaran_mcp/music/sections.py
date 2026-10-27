@@ -108,3 +108,45 @@ class Model:
         z = np.exp(z - z.max())
         p = z / z.sum()
         return {c: float(v) for c, v in zip(self.classes, p)}
+
+
+# Which section may follow which: the model proposes, the music decides.
+ALLOWED = {
+    "intro": {"groove", "breakdown", "build"},
+    "groove": {"breakdown", "build"},
+    "breakdown": {"build", "climax", "groove"},
+    "build": {"climax", "breakdown"},
+    "climax": {"groove", "breakdown", "build"},
+}
+CONFIDENT = 0.5
+HOLD_SECONDS = 2  # the model's top section must hold this long before a switch
+
+
+class SectionDecoder:
+    """Turns per-second model probabilities into sections, the same way in
+    training (for scoring) and at runtime."""
+
+    def __init__(self, start: str = "groove") -> None:
+        self.section = start
+        self.released = False  # the last step entered a climax from a breakdown or build
+        self._candidate: str | None = None
+        self._held = 0
+
+    def step(self, proba: dict[str, float]) -> str:
+        self.released = False
+        top = max(proba, key=proba.get)
+        if proba[top] < CONFIDENT or top == self.section or top not in ALLOWED.get(self.section, ()):
+            self._candidate, self._held = None, 0
+            return self.section
+        self._held = self._held + 1 if top == self._candidate else 1
+        self._candidate = top
+        if self._held >= HOLD_SECONDS:
+            self.released = top == "climax" and self.section in ("breakdown", "build")
+            self.section, self._candidate, self._held = top, None, 0
+        return self.section
+
+    def follow(self, section: str) -> None:
+        """Keep in step when something else (silence, a fast release) moved the section."""
+
+        if section != self.section:
+            self.section, self._candidate, self._held = section, None, 0

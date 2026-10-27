@@ -23,6 +23,7 @@ def runner(tmp_path, monkeypatch):
     importlib.reload(recorder)
     from amaran_mcp.music import runner as module
     importlib.reload(module)
+    monkeypatch.setattr(module, "load_model", lambda: None)  # rules only: deterministic
     return module
 
 

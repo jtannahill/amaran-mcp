@@ -34,6 +34,7 @@ from .applemusic import Track, anchor_for, now_playing
 from .capture import CaptureError, Source, open_source
 from .moods import MOODS, Mood
 from .recorder import RECORDINGS_DIR, Recorder
+from . import sections as section_model
 from .render import Output, Renderer
 
 log = logging.getLogger(__name__)
@@ -53,6 +54,21 @@ PERMISSION_MESSAGE = (
     "System Settings, Privacy and Security, Screen and System Audio Recording, then "
     "start music mode again."
 )
+
+
+PUBLISHED_MODEL = Path(__file__).parent / "sections.npz"
+LOCAL_MODEL = CONFIG_DIR / "sections.npz"  # also trained on the owner's sessions; never committed
+
+
+def load_model() -> "section_model.Model | None":
+    """The owner's local section model if there is one, else the published one."""
+
+    for path in (LOCAL_MODEL, PUBLISHED_MODEL):
+        model = section_model.Model.load(path)
+        if model is not None:
+            log.info("section model: %s", path)
+            return model
+    return None
 
 
 @dataclass
@@ -131,7 +147,7 @@ class _Run:
         self.source = source
         self.light = light
         self.music = music
-        self.analyzer = Analyzer(source.rate)
+        self.analyzer = Analyzer(source.rate, model=load_model())
         self.renderer = Renderer(self.mood, brightness_offset=_read_offset())
         self.state = "listening"
         self.track: Track | None = None

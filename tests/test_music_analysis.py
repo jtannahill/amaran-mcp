@@ -93,3 +93,23 @@ def test_bass_swell_in_breakdown_is_not_a_release():
     swell = feed_in_blocks(a, bass_swell(RATE, 12))
     assert not any(f.release for f in swell)
     assert swell[-1].section == "breakdown"
+
+
+class StubModel:
+    def __init__(self, section):
+        self.section = section
+
+    def proba(self, x):
+        return {s: (0.9 if s == self.section else 0.1 / 3) for s in ("groove", "breakdown", "build", "climax")}
+
+
+def test_model_cannot_force_an_impossible_section():
+    a = Analyzer(RATE, model=StubModel("climax"))
+    fs = feed_in_blocks(a, kick_track(RATE, 30))
+    assert "climax" not in {f.section for f in fs}
+
+
+def test_model_proposal_is_followed_when_allowed():
+    a = Analyzer(RATE, model=StubModel("breakdown"))
+    fs = feed_in_blocks(a, kick_track(RATE, 30))
+    assert fs[-1].section == "breakdown"
