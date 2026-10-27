@@ -3,7 +3,7 @@
 How music mode learned to follow house and trance: the research it rests on,
 what real music taught it, the models, the datasets and how every number here
 can be reproduced. No audio is in this repository. Public datasets are
-downloaded to `~/datasets`; the owner's own recordings stay on their Mac.
+downloaded to `~/datasets`; personal listening recordings stay on the Mac that made them.
 
 <a href="https://jtannahill.github.io/amaran-mcp/">
 <picture>
@@ -49,8 +49,8 @@ following house and trance played on the Mac or AirPlayed from an iPhone:
 continuous mixes such as [A State of Trance](https://www.astateoftrance.com/),
 [Find Your Harmony](https://andrewrayel.net/fyh-radioshow/) and
 [Future Sound of Egypt](https://futuresoundofegypt.com/). It should feel abstract and ethereal,
-with no flashing and no pulse on every beat. The moment that matters most to
-its owner is the breakdown, "when the chords lift and the vocal comes in",
+with no flashing and no pulse on every beat. The moment that matters most is
+the breakdown, "when the chords lift and the vocal comes in",
 where the light should bloom.
 
 ## How trance is built
@@ -111,7 +111,7 @@ each one shaped music mode.
 | **138 BPM, four to the floor.** A beat is 0.43 s, a bar 1.74 s, an 8-bar phrase 14 s, a 32-bar breakdown nearly a minute | The tempo tracker searches 100 to 160 BPM (no half-time 69 BPM confusion) and every timing rule counts in bars at the tempo it hears: a breakdown starts after 4 bars without the kick, stays pale for its first 2 bars, and a build needs 2 bars of rising tension. The model's 16 s window holds about one 8-bar phrase |
 | **A rolling, offbeat bassline** between the kicks, sidechained to them | The bass never really stops, so "is the kick in" cannot be judged by bass level. It is judged by beat strength at the remembered tempo, and a model sure of a build or a drop can end an intro the kick test missed |
 | **The breakdown is the point.** The kick goes, pads, piano and delay tails swell, and the vocal arrives, often a female voice drenched in reverb | Breakdowns get their own colour logic: pale first, then the chords. Blending in the CNN was chosen for breakdowns over builds. A reverb-washed vocal reads only 0.30 to 0.35 on Apple's singing class, lower than a dry voice, so the vocal boost needs scaling to it |
-| **Euphoria is harmonic.** Minor-key progressions such as i, VII, VI, VII (the owner's ASOT breakdown is B flat minor, A flat, G flat, A flat) lift onto major chords at the emotional peaks | The bloom is tied to that lift, minor onto major and nothing else. Major onto major (A flat to G flat) would bloom on every chord change |
+| **Euphoria is harmonic.** Minor-key progressions such as i, VII, VI, VII (one marked ASOT breakdown runs B flat minor, A flat, G flat, A flat) lift onto major chords at the emotional peaks | The bloom is tied to that lift, minor onto major and nothing else. Major onto major (A flat to G flat) would bloom on every chord change |
 | **The build** stacks snare rolls, white-noise risers, filter sweeps and sometimes a key change up | Tension is measured from noisiness and onset density, which rise through a build, rather than from brightness |
 | **The drop** brings the kick back under the supersaw anthem lead, the breakdown's melody at full size | A release needs a sharp jump in low-band onsets with strong pumping; a bass swell in the breakdown is not enough |
 | **Continuous mixes.** Tracks blend for 16 or 32 bars, and the radio host talks over intros and outros | A section can last only so long and must follow musical order, and speech never blooms: the classifier separates a host from a singer |
@@ -149,14 +149,14 @@ That is why the model is weakest at trance breakdown starts (about one in ten)
 while the GiantSteps trance subset shows the tempo side is already strong (97%).
 The plan follows from it:
 
-- **Train on the genre.** The background listener records the owner's own
+- **Train on the genre.** The background listener records a listener's own
   sessions (ASOT, Find Your Harmony, FSOE) with their marks: breakdown, lift,
   vocal, build, drop. Those train a local model that stays on their Mac, and
   the published model keeps to Creative Commons data.
 - **Mark the moments that matter.** A mark of "lift" or "vocal" in a
   breakdown is exactly the label SSME lacks.
 - **Score on trance separately.** Broad-EDM numbers hide trance-specific
-  failures; the owner's sessions become the trance test set.
+  failures; marked listening sessions become the trance test set.
 
 ## What music mode hears
 
@@ -206,7 +206,7 @@ recorded locally on 2026-10-26 and replayed with `amaran-mcp music-replay`.
 
 After tuning, the breakdown is found at 1:36 (the kick left at about 1:30; the
 rule waits 4 bars), and the light blooms each time the progression lifts from
-B flat minor to A flat, which the owner confirmed is right.
+B flat minor to A flat, which a listener confirmed by ear.
 
 ## Voice: Apple's on-device sound classifier
 
@@ -227,7 +227,7 @@ carry the same readings as live ones.
 |---|---|
 | Plain speech | 0.96 speech |
 | A synthetic singing voice | up to 0.40 singing |
-| A sung trance vocal entering a breakdown (owner's session) | about 0.30 to 0.35 singing, rising to 0.42 at the 90th percentile over a whole vocal track |
+| A sung trance vocal entering a breakdown (a marked listening session) | about 0.30 to 0.35 singing, rising to 0.42 at the 90th percentile over a whole vocal track |
 
 Real vocals read far lower than the 0 to 1 scale suggests. Across three
 captured vocal trance tracks:
@@ -311,15 +311,15 @@ The trees row is after the tempo tuning; before it they scored 0.490, 0.083,
 The two models are good at different things: the CNN finds breakdown starts
 best, the trees are better overall and at drops. The blend doubles the
 breakdown starts the trees find, keeps overall accuracy and releases, and
-gives up a little on builds. Breakdowns are the owner's centrepiece, so the
-blend shipped. On the owner's ASOT clip it found the breakdown at 1:35 (the
+gives up a little on builds. Breakdowns are the point of trance, so the
+blend shipped. On a marked ASOT clip it found the breakdown at 1:35 (the
 kick left at about 1:30) and called the build at 2:36 as tension rose; the
 trees alone called all of it a build.
 
 At runtime the model proposes a section once a second, and a state machine
 decides: sections follow musical order, a change must hold for 2 s, and a
-section lasts at least 8 s. Broad EDM is not trance, which is why the owner's
-own marked sessions matter most.
+section lasts at least 8 s. Broad EDM is not trance, which is why marked
+trance sessions matter most.
 
 ## Live check: the whole pipeline on 36 tracks
 
@@ -358,7 +358,7 @@ their 8 s even where an expert's label changes sooner. To rerun:
 
 ## The first marked session: Miss You
 
-Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You". The owner
+Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You". A human expert
 played the 4:14 cut from A State of Trance episode 1180 on 2026-10-26 and
 called out what they heard: 22 marks, typed live, so each lands a few seconds
 late. Those marks are the human expert row below.
@@ -406,7 +406,7 @@ where the kick leaves (beat strength falls from about 0.8 to under 0.3).
 
 Read this way, music mode agrees on the build into the last drop and both
 drops, hears the breakdown nine seconds late, misses the first build, and holds
-the last drop well past the outro. The owner also used words the
+the last drop well past the outro. The expert also used words the
 model has no class for, "crescendo" and "top of the climax", which suggests
 the drop needs a rising part and a peak. This is the first session for the
 local, trance-only model.
@@ -499,7 +499,7 @@ threshold was swept on 417 previews; Accuracy 1 for tracks between 100 and
 Lowering it exposed two things the synthetic tests had not: sidechain pumping
 of a held sub-bass reads as a beat at the track's tempo, and a sudden level
 jump reads as one kick. Kick presence now also needs a sharp attack, and a
-confirmed-kick release needs the kick to last 0.75 s. On the owner's ASOT clip
+confirmed-kick release needs the kick to last 0.75 s. On the marked ASOT clip
 a false release at 1:48 disappeared with these changes.
 
 A State of Trance now plays hard trance at 150 BPM and beyond (episode 1300
@@ -561,9 +561,9 @@ as silence because the analyser is warming up, not because the audio is quiet.
 
 ## Open questions
 
-- **Breakdown starts.** The blend finds about one in ten; the owner's marked
+- **Breakdown starts.** The blend finds about one in ten; marked listening
   sessions are the planned fix, trained into a local model that stays on
-  their Mac.
+  the listener's Mac.
 - **Major or minor.** Not reliably heard from chroma in dense mixes.
 - **The body as well as the music.** Heart rate (Apple Watch) and strain or
   recovery (WHOOP) to modulate the light alongside the music. Not started.
