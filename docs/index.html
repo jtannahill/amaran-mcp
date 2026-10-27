@@ -129,7 +129,7 @@
   }
   .clock { grid-area: 1 / 1; align-self: center; font: 300 28px/1.1 "Unbounded", "Hanken Grotesk", sans-serif; font-variant-numeric: tabular-nums; }
   .clock span { display: block; font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
-  .row-name { grid-column: 1; font: 500 14px/1.25 "Hanken Grotesk", sans-serif; color: var(--ink); }
+  .row-name { grid-column: 1; font: 500 14px/1.4 "Hanken Grotesk", sans-serif; color: var(--ink); }
   .row-name small { display: block; font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
   .r2 { grid-row: 2; } .r3 { grid-row: 3; }
   .scrub {
@@ -177,6 +177,21 @@
   .player { min-height: 20px; }
   .player iframe { width: 100%; max-width: 360px; height: 20px; border: 0; display: block; }
   .player.video iframe { height: auto; aspect-ratio: 16 / 9; border-radius: 8px; }
+  /* Each moment jumps the track there; the row the playhead is in lights up. */
+  .moments { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .moments caption { text-align: left; font: 500 14px/1.25 "Hanken Grotesk", sans-serif; color: var(--ink); margin: 0 0 6px; }
+  .moments th { text-align: left; font-weight: 400; font-size: 14px; color: var(--ink-soft); padding: 0 12px 8px 0; white-space: nowrap; }
+  .moments td { color: var(--ink-soft); padding: 0 12px 0 0; border-top: 1px solid var(--lane); vertical-align: baseline; }
+  .moments td:last-child, .moments th:last-child { padding-right: 0; white-space: nowrap; }
+  .moments button {
+    font: inherit; color: var(--ink); background: transparent; border: 0; padding: 10px 0; min-height: 40px;
+    cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: transparent;
+    text-underline-offset: 0.2em; transition: text-decoration-color 150ms var(--ease-out);
+  }
+  .moments button:hover { text-decoration-color: currentColor; }
+  .moments tr[data-now] td { color: var(--ink); }
+  .moments tr[data-now] button { text-decoration-color: currentColor; text-decoration-thickness: 2px; }
+  .about { font-size: 14px; color: var(--ink-soft); margin: 16px 0 0; }
 
   .notes { margin-top: 64px; max-width: 44em; }
   .notes h2 { font: 300 28px/1.2 "Unbounded", "Hanken Grotesk", sans-serif; letter-spacing: -0.02em; margin: 0 0 12px; }
@@ -200,6 +215,7 @@
     .lane-row b { font-size: 13px; }
     .readout, .legend, .listen { grid-column: 1; }
     .listen { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .moments { font-size: 14px; } .moments th, .moments td { padding-right: 8px; }
     .track-head h2, .notes h2, .now { font-size: 22px; }
   }
   @media (prefers-reduced-motion: reduce) {
@@ -255,8 +271,15 @@
       <p class="readout" id="readout" aria-hidden="true"></p>
       <p class="legend" id="legend">Click or drag to jump. Arrow keys move ten seconds, with Shift one second.</p>
       <div class="listen">
-        <div class="player" id="player"></div>
-        <p class="honest" id="honest"></p>
+        <div>
+          <div class="player" id="player"></div>
+          <p class="about" id="about"></p>
+        </div>
+        <table class="moments">
+          <caption>Moment by moment</caption>
+          <thead><tr><th scope="col">Moment</th><th scope="col" id="whohead">Human expert</th><th scope="col">Music mode</th><th scope="col">Off by</th></tr></thead>
+          <tbody id="moments"></tbody>
+        </table>
       </div>
     </div>
 
@@ -283,18 +306,42 @@
   const TRACKS = {
     missyou: {
       soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (a best reading of live marks made while listening)",
-      name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You", voice: "Alina Renae",
-      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end (the breakdown's start is read from the audio, where the kick leaves). Against that reading, music mode hears the build into the last drop from 2:46, two seconds early, and the drop at 3:24 to the second. It hears the breakdown nine seconds after the kick leaves at 2:03 and blooms twice inside it, holds an 8 s build inside the first drop at 1:48, misses the first build, hearing groove until the drop at 1:17, and holds the last drop until 4:55, where the expert hears the outro from 4:00.",
+      name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You", voice: "Alina Renae", who: "Human expert",
+      about: "A human expert marked this live, a few seconds late, while the 4:14 cut played in A State of Trance 1180. The marks were carried onto this full 5:05 version by matching the two recordings; the breakdown starts where the kick leaves, read from the audio.",
+      // [jump to, just inside the section; moment; second row; music mode; off by]
+      moments: [
+        [48, "First build", "0:48", "Missed, hears groove", "Missed"],
+        [75, "First drop", "1:15", "1:17", "2 s late"],
+        [108, "Lift in the drop", "1:47", "A build, 1:48 to 1:56", "1 s late"],
+        [123, "Breakdown", "2:03", "2:12, blooms at 2:23 and 2:37", "9 s late"],
+        [166, "Build", "2:48", "2:46", "2 s early"],
+        [205, "Last drop", "3:24", "3:24", "On time"],
+        [240, "Outro", "4:00", "Holds the drop to 4:55", "Missed"],
+      ],
     },
     throughitall: {
       youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Expert reading (by Claude from the recording, not a person)",
-      name: "nilsix and Clara Yates, Through It All", voice: "Clara Yates",
-      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording: where the kick is, how the energy moves and when Clara Yates sings, without music mode's section model. Against it, music mode hears the breakdown seven seconds late at 2:13 and blooms twice inside it, at 2:35 and 2:40, the build into the last drop seven seconds late at 2:50, and the drop three seconds early at 2:58. Both hear an early drop, music mode from 1:15 and the reading from 1:23, but music mode also opens out from 0:13, where the reading hears an intro and a build.",
+      name: "nilsix and Clara Yates, Through It All", voice: "Clara Yates", who: "Claude's reading",
+      about: "No person has marked this one yet. The second row is Claude's reading of the recording, from where the kick is, how the energy moves and when Clara Yates sings, made without music mode's section model.",
+      moments: [
+        [13, "Intro and build", "0:00 to 1:23", "Opens out from 0:13", "Too early"],
+        [76, "First drop", "1:23", "1:15", "8 s early"],
+        [127, "Breakdown", "2:06", "2:13, blooms at 2:35 and 2:40", "7 s late"],
+        [164, "Build", "2:43", "2:50", "7 s late"],
+        [179, "Last drop", "3:01", "2:58", "3 s early"],
+      ],
     },
     persiste: {
       youtube: "nqrqepe-yMA", file: "persiste.json", second: "Expert reading (by Claude from the recording, not a person)",
-      name: "Ferry Corsten, Persiste (A State of Trance 1300)",
-      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording, made without music mode's section model. This A State of Trance 1300 cut starts mid-mix at full energy. Against the reading, music mode runs about eight seconds late through the main event: the breakdown at 2:25 (reading 2:16), the build at 2:42 (2:35) and the drop at 3:13 (3:05). It blooms at 2:26 and 2:38 inside the breakdown and once at 0:51 in a short break the reading counts as groove, and it misses the short drop the reading hears at 2:07.",
+      name: "Ferry Corsten, Persiste (A State of Trance 1300)", who: "Claude's reading",
+      about: "No person has marked this one yet. The second row is Claude's reading of the recording, made without music mode's section model. This A State of Trance 1300 cut starts mid-mix at full energy.",
+      moments: [
+        [51, "Short break", "Groove from 0:50", "A breakdown, blooms at 0:51", "Extra"],
+        [128, "Short drop", "2:07", "Missed, hears groove", "Missed"],
+        [137, "Breakdown", "2:16", "2:25, blooms at 2:26 and 2:38", "9 s late"],
+        [156, "Build", "2:35", "2:42", "7 s late"],
+        [186, "Drop", "3:05", "3:13", "8 s late"],
+      ],
     },
   };
   let track = "missyou";
@@ -459,6 +506,9 @@
     const unmarked = data.expert ? false : data.marks ? data.marks.length === 0
       : !data.experts.build.length && !data.experts.break.length && !data.experts.drop.length;
     readout.textContent = unmarked ? heardText : `${heardText} ${second ? second + "." : data.marks ? "No mark near here." : "Experts: nothing marked here."}`;
+    const moments = TRACKS[track].moments;
+    const here = moments.findLastIndex(([at]) => at <= position + 0.5);
+    $("moments").querySelectorAll("tr").forEach((row, k) => row.toggleAttribute("data-now", k === here && position > 0));
     timeline.setAttribute("aria-valuenow", Math.round(position));
     timeline.setAttribute("aria-valuetext", `${fmt(position)}, music mode hears ${heard[2] ? heard[2].toLowerCase() : "silence"}${second ? `; ${second}` : ""}`);
     // A bloom is one moment; keep its words up for the bloom's hold.
@@ -621,7 +671,19 @@
     track = name;
     const t = TRACKS[name];
     $("trackname").textContent = t.name;
-    $("honest").textContent = t.honest;
+    $("about").textContent = t.about;
+    $("whohead").textContent = t.who;
+    $("moments").replaceChildren(...t.moments.map(([at, ...cells]) => {
+      const row = document.createElement("tr"), jump = document.createElement("button");
+      jump.type = "button"; jump.textContent = cells[0];
+      jump.addEventListener("click", () => { if (data) { seek(at); share(); } });
+      row.append(...cells.map((text, k) => {
+        const td = document.createElement("td");
+        if (k === 0) td.append(jump); else td.textContent = text;
+        return td;
+      }));
+      return row;
+    }));
     const [secondName, secondNote] = t.second.split(" (");
     $("secondname").replaceChildren(secondName, ...(secondNote ? [Object.assign(document.createElement("small"), { textContent: secondNote.replace(/\)$/, "") })] : []));
     document.querySelectorAll(".tracks button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.track === name)));
