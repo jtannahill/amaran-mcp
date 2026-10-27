@@ -222,7 +222,7 @@ class Analyzer:
                     harmony: Harmony, timbre: Timbre, dt: float, n: int) -> bool:
         """Once a second, let the model move the section (within what is allowed)."""
 
-        if self.section in ("silence",) or not self.is_music:
+        if self.section in ("silence", "intro") or not self.is_music:
             self._decoder.follow("groove")
             return False
         self._decoder.follow(self.section)
@@ -271,8 +271,9 @@ class Analyzer:
         self._build_time = self._build_time + dt if rising else 0.0
 
         section = self.section
-        if self.model is not None and self._model_sure and section != "silence":
-            # The model owns section changes while it is sure; the fast release
+        if self.model is not None and self._model_sure and section in ("groove", "breakdown", "build", "climax"):
+            # The model owns changes among these while it is sure (start-up,
+            # silence and intro stay with the rules: SSME has no intro); the fast release
             # (a kick slamming back) still applies, it is quicker than a second.
             if section in ("breakdown", "build"):
                 bass_back = bass_ref and bass_now > RELEASE_LEVEL * bass_ref

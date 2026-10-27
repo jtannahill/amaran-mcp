@@ -1,6 +1,9 @@
 """Score section predictions against labels, per second.
 
   frame accuracy        share of seconds with the right section
+  balanced accuracy     mean per-section recall: what the ship gate uses, since
+                        58% of SSME seconds are groove and "always groove" would
+                        otherwise look good
   boundaries            per section: a predicted start within 2 s of a true start
   release F             predicted releases within 2 s of the true drops
 
@@ -40,8 +43,13 @@ def score(truth: Sequence[str], predicted: Sequence[str], true_releases: list[fl
           predicted_releases: list[float]) -> dict:
     n = min(len(truth), len(predicted))
     accuracy = sum(truth[i] == predicted[i] for i in range(n)) / n if n else 0.0
+    recalls = []
+    for name in sorted(set(truth[:n])):
+        idx = [i for i in range(n) if truth[i] == name]
+        recalls.append(sum(predicted[i] == name for i in idx) / len(idx))
     return {
         "frame_accuracy": accuracy,
+        "balanced_accuracy": sum(recalls) / len(recalls) if recalls else 0.0,
         "boundaries": {name: match(starts(truth[:n], name), starts(predicted[:n], name)) for name in SCORED},
         "release_f": match(true_releases, predicted_releases)["f"],
     }

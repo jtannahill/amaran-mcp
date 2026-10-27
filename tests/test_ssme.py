@@ -40,3 +40,13 @@ def test_missing_field_means_no_events_of_that_kind(tmp_path):
     savemat(mat, {"break_start": np.array([[10.0]]), "break_end": np.array([[30.0]])})
     labels = ssme.labels(mat, duration=100.0, bpm=128)
     assert {l["section"] for l in labels} == {"groove", "breakdown"}
+
+
+def test_short_gap_before_a_drop_belongs_to_the_build(tmp_path):
+    """Seen in SSME track 100189023: build 70-85 s, drop at 87 s."""
+    mat = tmp_path / "gap.mat"
+    savemat(mat, {"drop": np.array([[87.0]]), "build_start": np.array([[70.0]]), "build_end": np.array([[85.0]])})
+    labels = ssme.labels(mat, duration=200.0, bpm=128)
+    build = next(l for l in labels if l["section"] == "build")
+    assert build["end"] == 87.0
+    assert not any(l["section"] == "groove" and 85 <= l["start"] < 87 for l in labels)

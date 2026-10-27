@@ -113,13 +113,14 @@ class Model:
 # Which section may follow which: the model proposes, the music decides.
 ALLOWED = {
     "intro": {"groove", "breakdown", "build"},
-    "groove": {"breakdown", "build"},
+    "groove": {"breakdown", "build", "climax"},  # a drop need not follow a marked build
     "breakdown": {"build", "climax", "groove"},
     "build": {"climax", "breakdown"},
     "climax": {"groove", "breakdown", "build"},
 }
 CONFIDENT = 0.5
 HOLD_SECONDS = 2  # the model's top section must hold this long before a switch
+MIN_STAY = 8  # seconds a section lasts at least once entered (sections run 20 to 60 s)
 
 
 class SectionDecoder:
@@ -131,9 +132,13 @@ class SectionDecoder:
         self.released = False  # the last step entered a climax from a breakdown or build
         self._candidate: str | None = None
         self._held = 0
+        self._stayed = MIN_STAY
 
     def step(self, proba: dict[str, float]) -> str:
         self.released = False
+        self._stayed += 1
+        if self._stayed < MIN_STAY:
+            return self.section
         top = max(proba, key=proba.get)
         if proba[top] < CONFIDENT or top == self.section or top not in ALLOWED.get(self.section, ()):
             self._candidate, self._held = None, 0
@@ -142,7 +147,7 @@ class SectionDecoder:
         self._candidate = top
         if self._held >= HOLD_SECONDS:
             self.released = top == "climax" and self.section in ("breakdown", "build")
-            self.section, self._candidate, self._held = top, None, 0
+            self.section, self._candidate, self._held, self._stayed = top, None, 0, 0
         return self.section
 
     def follow(self, section: str) -> None:

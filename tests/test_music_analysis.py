@@ -100,13 +100,13 @@ class StubModel:
         self.section = section
 
     def proba(self, x):
-        return {s: (0.9 if s == self.section else 0.1 / 3) for s in ("groove", "breakdown", "build", "climax")}
+        return {s: (0.9 if s == self.section else 0.025) for s in ("intro", "groove", "breakdown", "build", "climax")}
 
 
 def test_model_cannot_force_an_impossible_section():
-    a = Analyzer(RATE, model=StubModel("climax"))
+    a = Analyzer(RATE, model=StubModel("intro"))  # nothing goes back to an intro
     fs = feed_in_blocks(a, kick_track(RATE, 30))
-    assert "climax" not in {f.section for f in fs}
+    assert "intro" not in {f.section for f in fs[-300:]}
 
 
 def test_model_proposal_is_followed_when_allowed():

@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 ARCHIVE = "mp3s_soundcloud_cc_event_detection"
 CLIMAX_BARS = 32  # a drop opens a climax of about this long (SSME marks only the drop point)
 FALLBACK_CLIMAX = 30.0
+DROP_GAP = 4.0  # seconds between a build's end and a drop that still count as one move
 
 
 def unpack(root: Path) -> Path:
@@ -68,7 +69,11 @@ def labels(mat_path: Path, duration: float, bpm: float | None = None) -> list[di
             continue
         events += [(s, e, section) for s, e in zip(starts, ends) if e > s]
     climax = CLIMAX_BARS * 4 * 60 / bpm if bpm else FALLBACK_CLIMAX
-    for drop in _times(data, "drop"):
+    drops = _times(data, "drop")
+    # A build or break that ends just before a drop runs into it (SSME often
+    # leaves a second or two between them, which would read as a groove).
+    events = [(s, next((d for d in drops if 0 < d - e <= DROP_GAP), e), sec) for s, e, sec in events]
+    for drop in drops:
         events.append((drop, min(duration, drop + climax), "climax"))
 
     # Lay events on a timeline; later starts cut earlier sections short, gaps are groove.

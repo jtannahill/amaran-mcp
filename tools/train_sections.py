@@ -9,7 +9,9 @@ testing). For each fold the hand-written rules and the model are scored the
 same way (tools/score_sections.py), with the model's per-second
 probabilities turned into sections by the same SectionDecoder music mode
 uses live. The weights are written only if the model beats the rules on
-pooled frame accuracy and on build and breakdown boundaries (within 2 s), and
+pooled balanced accuracy (mean per-section recall; raw frame accuracy would
+reward always answering groove, 58% of SSME seconds) and on build and
+breakdown boundaries (within 2 s), and
 is no worse than the rules on the owner's labelled sessions when there are any.
 """
 
@@ -64,6 +66,7 @@ def decode(model: sections.Model, X: np.ndarray) -> tuple[list[str], list[float]
 
 def summarise(results: list[dict]) -> dict[str, float]:
     return {
+        "balanced_accuracy": float(np.mean([r["balanced_accuracy"] for r in results])),
         "frame_accuracy": float(np.mean([r["frame_accuracy"] for r in results])),
         "breakdown_f": float(np.mean([r["boundaries"]["breakdown"]["f"] for r in results])),
         "build_f": float(np.mean([r["boundaries"]["build"]["f"] for r in results])),
@@ -77,6 +80,11 @@ def fit(tracks: list[dict], seed: int = 0):
     X = np.concatenate([t["X"] for t in tracks])
     y = np.concatenate([t["y"] for t in tracks])
     means, scales = X.mean(axis=0), X.std(axis=0) + 1e-6
+    # Balance the sections: otherwise the model learns to answer groove.
+    rng = np.random.default_rng(seed)
+    classes, counts = np.unique(y, return_counts=True)
+    idx = np.concatenate([rng.choice(np.nonzero(y == c)[0], counts.max(), replace=True) for c in classes])
+    X, y = X[idx], y[idx]
     clf = MLPClassifier(hidden_layer_sizes=(32, 32), alpha=1e-3, max_iter=200, early_stopping=True,
                         random_state=seed).fit((X - means) / scales, y)
     return sections.Model(export(clf, means, scales)), export(clf, means, scales)
@@ -116,7 +124,7 @@ def main() -> None:
     for key in rules_all:
         print(f"  {key:15} rules {rules_all[key]:.3f}   model {model_all[key]:.3f}")
 
-    passes = (model_all["frame_accuracy"] > rules_all["frame_accuracy"]
+    passes = (model_all["balanced_accuracy"] > rules_all["balanced_accuracy"]
               and model_all["breakdown_f"] > rules_all["breakdown_f"]
               and model_all["build_f"] > rules_all["build_f"])
     model, weights = fit(public + (owner if args.owner else []))
@@ -126,7 +134,7 @@ def main() -> None:
         o_model = summarise([score_sections.score(t["y"], *decode(model, t["X"])[:1], t["true_releases"],
                                                   decode(model, t["X"])[1]) for t in owner])
         print(f"\nowner sessions: rules {o_rules}  model {o_model}")
-        passes = passes and o_model["frame_accuracy"] >= o_rules["frame_accuracy"]
+        passes = passes and o_model["balanced_accuracy"] >= o_rules["balanced_accuracy"]
     if not passes:
         print("\nThe model does not beat the rules: weights NOT written.")
         raise SystemExit(1)

@@ -72,6 +72,23 @@ def analyse(path: Path) -> dict[str, np.ndarray]:
     }
 
 
+def truth_for(mat: Path, seconds: int, bpm: float | None) -> np.ndarray:
+    truth = np.array(["groove"] * seconds, dtype=object)
+    for seg in ssme.labels(mat, float(seconds), bpm):
+        truth[int(seg["start"]) : int(np.ceil(seg["end"]))] = seg["section"]
+    return truth.astype(str)
+
+
+def relabel(target: Path, mat: Path) -> None:
+    """Recompute the labels of an extracted track (after a change to ssme.labels)."""
+
+    with np.load(target, allow_pickle=False) as d:
+        data = {k: d[k] for k in d.files}
+    data["truth"] = truth_for(mat, len(data["vectors"]), float(data["bpm"]) or None)
+    data["true_releases"] = np.array(ssme.releases(mat), dtype=np.float32)
+    np.savez_compressed(target, **data)
+
+
 def run_one(args: tuple[Path, Path, Path]) -> str:
     mp3, mat, out_dir = args
     target = out_dir / f"{mp3.stem}.npz"
@@ -81,11 +98,7 @@ def run_one(args: tuple[Path, Path, Path]) -> str:
         data = analyse(mp3)
         duration = float(len(data["vectors"]))
         bpm = float(data["bpm"]) or None
-        labels = ssme.labels(mat, duration, bpm)
-        truth = np.array(["groove"] * int(duration), dtype=object)
-        for seg in labels:
-            truth[int(seg["start"]) : int(np.ceil(seg["end"]))] = seg["section"]
-        np.savez_compressed(target, **data, truth=truth.astype(str),
+        np.savez_compressed(target, **data, truth=truth_for(mat, int(duration), bpm),
                             true_releases=np.array(ssme.releases(mat), dtype=np.float32))
         return f"{mp3.stem}: {int(duration)} s, {bpm or 0:.0f} BPM"
     except Exception as err:  # one bad file should not stop the run
@@ -98,10 +111,18 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=6)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--relabel", action="store_true", help="only recompute labels of extracted tracks")
     args = parser.parse_args()
     out_dir = args.out.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     pairs = ssme.tracks(args.root.expanduser())[: args.limit]
+    if args.relabel:
+        for mp3, mat in pairs:
+            target = out_dir / f"{mp3.stem}.npz"
+            if target.exists():
+                relabel(target, mat)
+        print(f"relabelled {len(pairs)} tracks")
+        return
     with ProcessPoolExecutor(args.jobs) as pool:
         for i, message in enumerate(pool.map(run_one, [(mp3, mat, out_dir) for mp3, mat in pairs]), 1):
             print(f"[{i}/{len(pairs)}] {message}", flush=True)

@@ -64,8 +64,9 @@ def test_numpy_inference_matches_scikit_learn():
 
 def test_decoder_holds_and_respects_musical_order():
     d = sections.SectionDecoder()
+    intro_only = {"intro": 0.9, "groove": 0.05, "breakdown": 0.05, "build": 0.0, "climax": 0.0}
+    assert [d.step(intro_only) for _ in range(5)] == ["groove"] * 5   # never back to an intro
     climax = {"groove": 0.05, "breakdown": 0.05, "build": 0.0, "climax": 0.9}
-    assert [d.step(climax) for _ in range(5)] == ["groove"] * 5   # groove cannot jump to climax
     breakdown = {"groove": 0.1, "breakdown": 0.85, "build": 0.05, "climax": 0.0}
     seq = [d.step(breakdown) for _ in range(4)]
     assert seq[0] == "groove" and seq[-1] == "breakdown"          # after holding 2 s
@@ -77,3 +78,18 @@ def test_unsure_model_changes_nothing():
     d = sections.SectionDecoder()
     unsure = {"groove": 0.3, "breakdown": 0.4, "build": 0.2, "climax": 0.1}
     assert [d.step(unsure) for _ in range(10)] == ["groove"] * 10
+
+
+def test_balanced_accuracy_does_not_reward_always_groove():
+    truth = ["groove"] * 60 + ["breakdown"] * 20 + ["build"] * 10 + ["climax"] * 10
+    always = ["groove"] * 100
+    result = score_sections.score(truth, always, [], [])
+    assert result["frame_accuracy"] == 0.6
+    assert result["balanced_accuracy"] == 0.25
+
+
+def test_groove_may_go_straight_to_climax_without_a_release():
+    d = sections.SectionDecoder()
+    climax = {"groove": 0.05, "breakdown": 0.05, "build": 0.0, "climax": 0.9}
+    seq = [d.step(climax) for _ in range(3)]
+    assert seq[-1] == "climax" and not d.released
