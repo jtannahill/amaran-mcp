@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import logging
+import time
 from typing import TypeVar
 
 from bleak import BleakClient, BleakScanner
@@ -30,6 +31,12 @@ from .sidus.protocol import (
 log = logging.getLogger(__name__)
 
 PROXY_SERVICE = "00001828-0000-1000-8000-00805f9b34fb"
+# The light advertises in bursts; on 2026-10-27 it went 25 s between them, so a
+# 20 s scan missed it. The scan stops at the first advert, so this is only a limit.
+SCAN_SECONDS = 45.0
+# Writes go without response, so a disconnect straight after one can drop it:
+# seen on the light, a CLI command that printed ok and never arrived.
+FLUSH_SECONDS = 0.5
 PROXY_IN = "00002add-0000-1000-8000-00805f9b34fb"
 PROXY_OUT = "00002ade-0000-1000-8000-00805f9b34fb"
 
@@ -55,6 +62,7 @@ class MeshLink:
         self._net_key = bytes.fromhex(light.net_key)
         self._app_key = bytes.fromhex(light.app_key)
         self._client: BleakClient | None = None
+        self._last_write = 0.0  # when the last PDU went to the radio (monotonic)
         self._lock = asyncio.Lock()
         self._idle_task: asyncio.Task | None = None
         self._beacon = asyncio.Event()
@@ -198,7 +206,7 @@ class MeshLink:
             return False
 
         try:
-            device = await BleakScanner.find_device_by_filter(ours, timeout=20.0)
+            device = await BleakScanner.find_device_by_filter(ours, timeout=SCAN_SECONDS)
         except BleakError as err:
             raise LinkError(
                 f"Could not scan for the light ({err}). Check that Bluetooth is on and that "
@@ -222,6 +230,10 @@ class MeshLink:
         log.info("light disconnected")
 
     async def _drop(self) -> None:
+        # Give the last write time to leave before the link goes.
+        wait = FLUSH_SECONDS - (time.monotonic() - self._last_write)
+        if self._client and self._client.is_connected and wait > 0:
+            await asyncio.sleep(wait)
         client, self._client = self._client, None
         for _, future in self._waiters:
             if not future.done():
@@ -262,6 +274,7 @@ class MeshLink:
     async def _write(self, client: BleakClient, pdu: bytes) -> None:
         """Write a proxy PDU, splitting it with proxy SAR if the MTU is small."""
 
+        self._last_write = time.monotonic()
         room = max(20, client.mtu_size - 3)
         if len(pdu) <= room:
             await client.write_gatt_char(PROXY_IN, pdu, response=False)
