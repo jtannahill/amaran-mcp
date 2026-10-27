@@ -12,6 +12,7 @@
   amaran-mcp music [--mood NAME] [--log-features PATH]   run music mode in the foreground
   amaran-mcp music-stop                         stop a background music mode
   amaran-mcp listen                             record listening sessions (no light); run at login
+  amaran-mcp mark KIND [NOTE]                   flag this moment: breakdown, lift, vocal, build, drop
   amaran-mcp install-listener | uninstall-listener   the launch agent that runs `listen`
   amaran-mcp music-record SECONDS NAME          record a tuning clip of what this Mac plays
   amaran-mcp music-replay PATH                  replay a clip through the analysis
@@ -188,7 +189,7 @@ def main() -> None:
                                             "brightness", "white", "color", "effect",
                                             "music-probe", "music", "music-stop",
                                             "music-record", "music-replay", "listen",
-                                            "install-listener", "uninstall-listener"])
+                                            "install-listener", "uninstall-listener", "mark"])
     parser.add_argument("values", nargs="*")
     parser.add_argument("--db", type=Path, help="amaran Desktop amaran.db (import)")
     parser.add_argument("--account", help="amaran account email or phone (import from the account)")
@@ -220,6 +221,14 @@ def main() -> None:
             print(asyncio.run(clips.record(seconds, name)))
         elif args.command == "music-replay":
             _music_replay(Path(args.values[0]))
+        elif args.command == "mark":
+            from .music import control
+            kind = {"climax": "drop", "vocals": "vocal"}.get(args.values[0], args.values[0]) if args.values else "other"
+            try:
+                control.mark(kind, " ".join(args.values[1:]) or None)
+                print(f"marked {kind}")
+            except RuntimeError as err:
+                print(err)
         elif args.command == "listen":
             from .music.listener import listen
             raise SystemExit(asyncio.run(listen()))
