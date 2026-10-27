@@ -171,17 +171,33 @@ Results, held out, pooled over 402 tracks:
 | --- | --- | --- | --- | --- |
 | Hand-written rules | 0.364 | 0.016 | 0.000 | 0.095 |
 | MLP on music mode's 15 readings | 0.423 | below rules | below rules | |
-| Gradient-boosted trees + spectral summary | **0.490** | **0.083** | **0.090** | **0.190** |
-| Spectrogram CNN | _training_ | | | |
+| Gradient-boosted trees + spectral summary | 0.482 | 0.045 | **0.083** | 0.186 |
+| Spectrogram CNN (16 s log-mel, 12 epochs) | 0.436 | **0.106** | 0.066 | 0.151 |
+| **Blend, 50% trees + 50% CNN (shipped)** | **0.486** | 0.090 | 0.073 | **0.200** |
 
-The trees are shipped (`src/amaran_mcp/music/sections.npz`, Creative Commons
-data only); music mode runs them in numpy, 10 ms once a second, under a state
-machine that keeps musical order and minimum section lengths. On the owner's
-ASOT breakdown they caught a build the rules missed and mislabelled part of a
-chord-cycling breakdown as groove: broad EDM is not trance, which is why the
-owner's own marked sessions matter most.
+(Trees after the tempo tuning; before it they scored 0.490 / 0.083 / 0.090 /
+0.190 on features music mode no longer computes. The rules dropped to 0.345
+balanced with the tuned tempo tracker.)
+
+The two models are good at different things: the CNN finds breakdown starts
+best, the trees are better overall and at drops. The 50/50 blend doubles the
+breakdown starts found by the trees, keeps overall accuracy and releases, and
+gives up a little on builds; breakdowns are the owner's centrepiece. On the
+owner's ASOT clip the blend found the breakdown at 1:35 (the kick left at
+about 1:30), held it through the chord cycle apart from 9 s, and called the
+build at 2:36 as tension rose; the trees alone called all of it a build.
+
+The blend is shipped (`src/amaran_mcp/music/sections.npz`, Creative Commons
+data only); music mode runs both parts in numpy, 13 ms once a second, under a
+state machine that keeps musical order and minimum section lengths. Broad EDM
+is not trance, which is why the owner's own marked sessions matter most.
 
 ```sh
 uv run python tools/extract_features.py ~/datasets/ssme --out ~/datasets/features/ssme
-uv run python tools/train_sections.py --features ~/datasets/features/ssme
+uv run python tools/train_sections.py --features ~/datasets/features/ssme --save-heldout ~/datasets/heldout/trees
+uv run python tools/extract_mel.py ~/datasets/ssme --labels ~/datasets/features/ssme --out ~/datasets/mel/ssme
+uv run python tools/train_cnn.py --mel ~/datasets/mel/ssme --epochs 12 --save-heldout ~/datasets/heldout/cnn
+uv run python tools/score_ensemble.py --labels ~/datasets/features/ssme --trees ~/datasets/heldout/trees --cnn ~/datasets/heldout/cnn
+uv run python tools/train_cnn.py --mel ~/datasets/mel/ssme --epochs 12 --final cnn.npz
+uv run python tools/make_ensemble.py --trees src/amaran_mcp/music/sections.npz --cnn cnn.npz --weight 0.5 --out src/amaran_mcp/music/sections.npz
 ```
