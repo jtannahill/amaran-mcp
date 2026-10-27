@@ -48,10 +48,13 @@ func defaultOutputUID() -> String {
 }
 
 var classifyFD: Int32? = nil
+var classifyFile: String? = nil
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
     if argument == "--classify-fd", let value = arguments.popFirst(), let fd = Int32(value) {
         classifyFD = fd
+    } else if argument == "--classify-file", let value = arguments.popFirst() {
+        classifyFile = value
     } else {
         FileHandle.standardError.write("amaran-systemtap: unknown option \(argument)\n".data(using: .utf8)!)
         exit(2)
@@ -77,6 +80,24 @@ final class ClassWriter: NSObject, SNResultsObserving {
 
     func request(_ request: SNRequest, didFailWithError error: Error) {
         FileHandle.standardError.write("amaran-systemtap: classifier stopped: \(error)\n".data(using: .utf8)!)
+    }
+}
+
+// File mode (for training): classify an audio file, print the same JSON lines
+// on stdout, and exit. No tap, no capture permission needed.
+if let path = classifyFile {
+    do {
+        let analyzer = try SNAudioFileAnalyzer(url: URL(fileURLWithPath: path))
+        let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
+        request.windowDuration = CMTime(seconds: 1.5, preferredTimescale: 48000)
+        request.overlapFactor = 0.66
+        let writer = ClassWriter(fd: STDOUT_FILENO)
+        try analyzer.add(request, withObserver: writer)
+        analyzer.analyze()
+        exit(0)
+    } catch {
+        FileHandle.standardError.write("amaran-systemtap: cannot classify \(path): \(error)\n".data(using: .utf8)!)
+        exit(3)
     }
 }
 
