@@ -1,18 +1,19 @@
 """Animated SVG heroes for the README, from a demo timeline (colours only, no audio).
 
-Usage: uv run python tools/demo_hero.py docs/visionary.json docs
+Usage: uv run python tools/demo_hero.py docs/missyou.json docs [--still SECONDS]
 
 Writes hero-wide.svg and hero-narrow.svg: a tube whose colour follows the
 default mood through the whole track in a 40 s loop, the colour of every two
 seconds as a band, a playhead, and the sections music mode heard. CSS
 animation only, so GitHub shows it in a README; with reduced motion it holds
-still on the breakdown.
+still on a breakdown moment (--still).
 """
 import colorsys, json, sys
 from pathlib import Path
 
 data = json.loads(Path(sys.argv[1]).read_text())
 out = Path(sys.argv[2])
+STILL = float(sys.argv[sys.argv.index("--still") + 1]) if "--still" in sys.argv else 150.0
 cols, frames, dur = data["colours"]["ethereal"], data["frames"], data["duration"]
 LOOP = 40.0  # seconds for the whole track: about nine times real speed
 STEP = 2.0   # seconds of music per keyframe
@@ -77,7 +78,7 @@ def svg(width, height, tube, band, label_y, font):
            f"text{{font:500 {font}px -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;fill:#c3c8d6}}"
            # Still, at the start of the breakdown, for anyone who asked for less motion.
            f"@media (prefers-reduced-motion:reduce){{.t,.w,.h{{animation:none}}"
-           f".t{{fill:{light(at(165))}}}.w{{fill:{wall(at(165))}}}.h{{transform:translateX({165 / dur * bw:.1f}px)}}}}")
+           f".t{{fill:{light(at(STILL))}}}.w{{fill:{wall(at(STILL))}}}.h{{transform:translateX({STILL / dur * bw:.1f}px)}}}}")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
             f'<style>{css}</style>'
             f'<rect class="w" width="{width}" height="{height}" rx="14" fill="{wall(at(0))}"/>'

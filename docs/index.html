@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Play a breakdown</title>
-<meta name="description" content="Press play on a Creative Commons trance track and watch an amaran light follow it, second by second, the way amaran-mcp's music mode does.">
+<meta name="description" content="Press play on a trance track and watch an amaran light follow it, second by second, the way amaran-mcp's music mode does.">
 <link rel="preload" href="fonts/Unbounded.woff2" as="font" type="font/woff2" crossorigin>
 <style>
   /* Self-hosted, SIL Open Font License (fonts/OFL-*.txt). */
@@ -18,6 +18,8 @@
     --tube: #3a4a8c;
     --lane: rgba(238, 240, 246, 0.16);
     --lane-strong: rgba(238, 240, 246, 0.62);
+    --lane-tick: rgba(238, 240, 246, 0.78);
+    --ghost: rgba(238, 240, 246, 0.38);
     --focus: #f7f8fc;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     color-scheme: dark;
@@ -107,7 +109,7 @@
     margin: 0 auto;
     padding: 0 clamp(16px, 4vw, 48px) 32px;
   }
-  .tracks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
+  .tracks { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 24px -16px; }
   .tracks button {
     font: 500 16px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft); background: transparent;
     border: 0; border-radius: 999px; padding: 11px 16px; min-height: 44px; cursor: pointer;
@@ -115,30 +117,65 @@
   }
   .tracks button:hover { color: var(--ink); }
   .tracks button[aria-pressed="true"] { color: var(--wall); background: var(--ink-soft); }
-  .track-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; margin: 0 0 12px; }
+  .track-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; margin: 0 0 16px; }
   .track-head h2 { font: 500 17px/1.3 "Hanken Grotesk", sans-serif; margin: 0; }
-  .track-head span { color: var(--ink-soft); font-size: 15px; font-variant-numeric: tabular-nums; }
-  .timeline { position: relative; cursor: pointer; touch-action: none; }
-  .band { display: block; width: 100%; height: 64px; border-radius: 8px; }
-  .lane { margin-top: 14px; }
-  .lane-name { display: block; font-size: 14px; color: var(--ink-soft); pointer-events: none; margin: 0 0 6px; }
-  .lane-bars { position: relative; height: 30px; }
-  .lane-bars i { position: absolute; top: 0; height: 8px; border-radius: 4px; background: var(--lane); }
-  .lane-bars i.loud { background: var(--lane-strong); }
-  .lane-bars b { visibility: hidden; }
-  .lane-bars b {
-    position: absolute; top: 12px; font: 500 13px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft);
-    white-space: nowrap; transform: translateX(0);
-  }
-  .playhead {
-    position: absolute; top: -6px; bottom: -4px; width: 2px; margin-left: -1px;
-    background: var(--ink); border-radius: 1px; pointer-events: none; left: 0;
-  }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 18px 0 0; color: var(--ink-soft); font-size: 15px; }
+  .track-head .clock-small { display: none; color: var(--ink-soft); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  .player { margin: 28px 0 0; }
-  .player iframe { width: 100%; height: 120px; border: 0; border-radius: 8px; display: block; }
-    .honest { max-width: 44em; color: var(--ink-soft); margin: 28px 0 0; }
+  /* Names in a left gutter; every row draws its own piece of the playhead, so it never crosses text. */
+  .timeline {
+    display: grid; grid-template-columns: 10rem minmax(0, 1fr);
+    grid-template-rows: 64px minmax(32px, auto) minmax(32px, auto) auto auto auto;
+    column-gap: 24px; row-gap: 14px;
+  }
+  .clock { grid-area: 1 / 1; align-self: center; font: 600 22px/1.1 "Hanken Grotesk", sans-serif; font-variant-numeric: tabular-nums; }
+  .clock span { display: block; font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
+  .row-name { grid-column: 1; font: 500 14px/1.25 "Hanken Grotesk", sans-serif; color: var(--ink); }
+  .row-name small { display: block; font-size: 13px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
+  .r2 { grid-row: 2; } .r3 { grid-row: 3; }
+  .scrub {
+    grid-column: 2; grid-row: 1 / 4; display: grid; grid-template-rows: subgrid; row-gap: 14px;
+    --pos: 0%; cursor: pointer; touch-action: none; border-radius: 10px;
+  }
+  .scrub[aria-disabled="true"] { cursor: default; }
+  .scrub[data-dragging] { cursor: grabbing; user-select: none; }
+  .scrub:focus-visible { outline: 2px solid var(--focus); outline-offset: 6px; }
+  .row { position: relative; }
+  .row::after {
+    content: ""; position: absolute; left: var(--pos); width: 2px; margin-left: -1px;
+    background: var(--ink); border-radius: 1px; pointer-events: none;
+  }
+  .scrub:focus-visible .row::after, .scrub[data-dragging] .row::after { width: 3px; margin-left: -1.5px; }
+  .band-row::after { top: -4px; bottom: -4px; }
+  .lane-row::after { top: -2px; height: 16px; }
+  .band { display: block; width: 100%; height: 64px; border-radius: 8px; background: var(--lane); }
+  .lane-row i { position: absolute; top: 0; height: 12px; border-radius: 3px; background: var(--lane-strong); }
+  .lane-row i.tick { width: 2px; border-radius: 1px; background: var(--lane-tick); }
+  .lane-row i.bloom { top: -4px; width: 2px; height: 20px; border-radius: 1px; background: var(--ink); }
+  .lane-row b {
+    position: absolute; top: 18px; font: 500 13px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft);
+    white-space: nowrap; pointer-events: none;
+  }
+  .ghost {
+    position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--ghost);
+    display: none; pointer-events: none;
+  }
+  .tip {
+    position: absolute; top: -34px; transform: translateX(-50%); display: none; white-space: nowrap;
+    font: 600 13px/1 "Hanken Grotesk", sans-serif; color: var(--wall); background: var(--ink);
+    padding: 6px 8px; border-radius: 6px; pointer-events: none;
+  }
+  @media (hover: hover) { .scrub:hover .ghost, .scrub:hover .tip { display: block; } }
+  .scrub[data-dragging] .ghost { display: none; }
+  .scrub[data-dragging] .tip { display: block; }
+  .readout, .legend, .player { grid-column: 2; margin: 0; }
+  .readout { font-size: 15px; color: var(--ink); min-height: 1.55em; }
+  .legend { font-size: 14px; color: var(--ink-soft); }
+  .player { min-height: 20px; margin-top: 10px; }
+  .player iframe { width: 100%; height: 20px; border: 0; display: block; }
+  .player.video iframe { height: auto; aspect-ratio: 16 / 9; max-width: 360px; border-radius: 8px; }
+
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 48px; }
+  .honest { max-width: 36em; color: var(--ink-soft); margin: 0; }
   footer { max-width: 1160px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 48px) 56px; color: var(--ink-soft); font-size: 15px; }
 
   @media (max-width: 720px) {
@@ -146,12 +183,18 @@
     .room { grid-template-columns: 16px minmax(0, 1fr); gap: 20px; min-height: 0; padding-top: 32px; align-items: stretch; }
     .stand { justify-content: stretch; }
     .tube { width: 16px; height: auto; min-height: 100%; border-radius: 8px; }
+    .tracks { margin-left: -12px; } .tracks button { padding: 10px 12px; }
+    .track-head .clock-small { display: inline; }
+    .timeline { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px auto 32px auto 32px auto auto auto; row-gap: 8px; }
+    .clock { display: none; }
+    .r2 { grid-row: 2; } .r3 { grid-row: 4; }
+    .row-name { position: relative; z-index: 1; pointer-events: none; }
+    .scrub { grid-column: 1; grid-row: 1 / 6; row-gap: 8px; }
+    .scrub > :nth-child(1) { grid-row: 1; } .scrub > :nth-child(2) { grid-row: 3; } .scrub > :nth-child(3) { grid-row: 5; }
     .band { height: 48px; }
-    .lane-bars b { font-size: 12px; }
-    .tracks button { padding: 11px 12px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .playhead { transition: none; }
+    .lane-row b { font-size: 12px; }
+    .readout, .legend, .player { grid-column: 1; }
+    .notes { grid-template-columns: 1fr; gap: 24px; }
   }
 </style>
 </head>
@@ -181,39 +224,44 @@
 
   <section class="track" aria-label="The whole track">
     <div class="tracks" role="group" aria-label="Track">
-      <button type="button" data-track="missyou" aria-pressed="true">A State of Trance</button>
-      <button type="button" data-track="visionary" aria-pressed="false">A breakdown that blooms</button>
-      <button type="button" data-track="atlantis" aria-pressed="false">A build and a drop</button>
+      <button type="button" data-track="missyou" aria-pressed="true">Miss You</button>
+      <button type="button" data-track="throughitall" aria-pressed="false">Through It All</button>
+      <button type="button" data-track="persiste" aria-pressed="false">Persiste</button>
     </div>
     <div class="track-head">
       <h2 id="trackname">Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You</h2>
-      <span id="clock">0:00 / 0:00</span>
+      <span class="clock-small" id="clocksmall">0:00 / 0:00</span>
     </div>
-    <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Position in the track"
-         aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
-      <canvas class="band" id="band" aria-hidden="true"></canvas>
-      <div class="lane"><span class="lane-name">Music mode heard</span><div class="lane-bars" id="heard"></div></div>
-      <div class="lane"><span class="lane-name" id="secondname">Experts marked</span><div class="lane-bars" id="experts"></div></div>
-      <div class="playhead" id="playhead"></div>
+    <div class="timeline">
+      <div class="clock"><b id="clocknow">0:00</b><span id="clocklen">of 0:00</span></div>
+      <span class="row-name r2">Music mode heard<small>blooms are the tall ticks</small></span>
+      <span class="row-name r3" id="secondname">Experts marked</span>
+      <div class="scrub" id="timeline" role="slider" tabindex="0" aria-label="Position in the track"
+           aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true">
+        <div class="row band-row"><canvas class="band" id="band" aria-hidden="true"></canvas><i class="ghost" id="ghost"></i><output class="tip" id="tip"></output></div>
+        <div class="row lane-row" id="heard"></div>
+        <div class="row lane-row" id="experts"></div>
+      </div>
+      <p class="readout" id="readout" aria-hidden="true"></p>
+      <p class="legend">Click or drag to jump. Arrow keys move ten seconds, with Shift one second.</p>
+      <div class="player" id="player"></div>
     </div>
-    <p class="legend">Click or drag along the track to jump. Arrow keys move ten seconds.</p>
 
-    <div class="player" id="player"></div>
-
-    <p class="honest" id="honest"></p>
-    <p class="honest">The two Creative Commons tracks were picked because music mode gets them mostly right.
-      Across the 402 tracks the model learned from, scored on tracks it had not seen, it is far less sure, and it
-      finds about one breakdown start in ten. Every number, and what is still wrong, is in
-      <a href="https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md">the research notes</a>.
-      The audio streams from YouTube and SoundCloud; only the colours, the section calls and the marks are stored here.</p>
+    <div class="notes">
+      <p class="honest" id="honest"></p>
+      <p class="honest">Each track's light was computed offline by the real pipeline from a silent capture of the
+        exact upload the player streams, so the light and the music stay in step. Only the colours, the section
+        calls and the marks are stored here, never audio. Music mode is far from perfect: on 402 Creative Commons
+        tracks it had not trained on, it finds about one breakdown start in ten. Every number, and what is still
+        wrong, is in <a href="https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md">the research notes</a>.</p>
+    </div>
   </section>
 </main>
 <footer>
-  <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp on GitHub</a>. Tracks: Craig Connelly and Nicholas
-  Gunn feat. Alina Renae, Miss You, from Craig Connelly's SoundCloud (colours from the A State of Trance 1180 cut); Rameses B, Visionary, and Bionick, Atlantis
-  (ft. Digital:twist), from the <a href="https://osf.io/eydxk/">SSME dataset</a> of Creative Commons tracks with expert
-  section labels.
-  Not affiliated with Aputure or amaran.
+  <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp on GitHub</a>. Tracks play from their official uploads:
+  Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You, on Craig Connelly's SoundCloud; nilsix and Clara Yates,
+  Through It All, on Black Hole Recordings' YouTube; Ferry Corsten, Persiste (A State of Trance 1300), on Ferry
+  Corsten's YouTube. Not affiliated with Aputure, amaran or the artists.
 </footer>
 
 <script src="https://w.soundcloud.com/player/api.js"></script>
@@ -221,17 +269,19 @@
 (() => {
   const TRACKS = {
     missyou: {
-      listen: 1886402916, file: "missyou.json", second: "You marked (typed during the song, a few seconds late)",
+      soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (live while listening, a few seconds late)",
       name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You",
-      honest: "The light and the timeline here come from the 4:14 cut in A State of Trance episode 1180, recorded on the owner's Mac while they played it and called out what they heard. The player below is the full 5:05 version on SoundCloud, so the two are not in sync: press Play here to watch the light on its own, and use the player to listen. Music mode bloomed at 1:22 and 2:03, close to two of the lifts the owner called. It heard the first minute as groove where they heard a build and a first climax, and its drop came at 3:14, on their top of the climax but after the climax they called from 2:38.",
+      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; those marks were carried onto this full 5:05 version by matching the two recordings, and the light was computed from a silent capture of this exact upload. Music mode's drop at 3:24 lands on the climax they called, to the second, and it opens out at 1:17 where they called the first climax. Through the long breakdown it blooms at 2:23 and 2:37, before the lifts they called from 2:48, and two of their lifts fall where it hears a drop.",
     },
-    visionary: {
-      soundcloud: 40261568, second: "Experts marked", file: "visionary.json", name: "Rameses B, Visionary",
-      honest: "Music mode calls the build on the second the experts mark it, the drop three seconds late, and the long breakdown four seconds late; it blooms three times inside that breakdown as the chords lift. It also hears five short breakdowns the experts did not mark, where the kick only drops out for a few bars.",
+    throughitall: {
+      youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Human expert marked (not marked yet)",
+      name: "nilsix and Clara Yates, Through It All",
+      honest: "Captured silently from Black Hole Recordings' upload and run through the whole pipeline; nobody has marked it yet, so this is music mode on its own. It opens out at 1:01 and again at 2:51, and in the breakdown from 2:13 it blooms twice, at 2:35 and 2:41, as the chords lift onto D and E major.",
     },
-    atlantis: {
-      soundcloud: 54846659, second: "Experts marked", file: "atlantis.json", name: "Bionick, Atlantis (ft. Digital:twist)",
-      honest: "Music mode calls the build three seconds late and the breakdown a second late. It calls a drop ten seconds early at 1:18, goes back to the build, and then catches the real drop at 1:29, one second late. No bloom here: the breakdown's chords never lift from minor to major.",
+    persiste: {
+      youtube: "nqrqepe-yMA", file: "persiste.json", second: "Human expert marked (not marked yet)",
+      name: "Ferry Corsten, Persiste (A State of Trance 1300)",
+      honest: "Captured silently from Ferry Corsten's upload of the A State of Trance 1300 cut, which starts mid-mix at full energy; nobody has marked it yet, so this is music mode on its own. A short break at 0:49 drops straight back in, then the breakdown from 2:25 blooms at 2:26 and 2:38 as the chords lift onto A and G major, builds from 2:42 and drops at 3:13.",
     },
   };
   let track = "missyou";
@@ -246,11 +296,12 @@
   };
   const NAMES = { intro: "Intro", groove: "Groove", breakdown: "Breakdown", build: "Build", climax: "Drop", silence: "" };
   const $ = (id) => document.getElementById(id);
-  const tube = $("tube"), now = $("now"), detail = $("detail"), band = $("band"), playhead = $("playhead");
-  const timeline = $("timeline"), clock = $("clock"), playBtn = $("play"), playLabel = $("playlabel");
+  const tube = $("tube"), now = $("now"), detail = $("detail"), band = $("band");
+  const timeline = $("timeline"), playBtn = $("play"), playLabel = $("playlabel"), readout = $("readout");
+  const ghost = $("ghost"), tip = $("tip");
   const root = document.documentElement;
   let data = null, mood = "ethereal", position = 0, playing = false, player = null;
-  let anchorPos = 0, anchorAt = 0, lastSection = null, silent = false;
+  let anchorPos = 0, anchorAt = 0, lastSection = null, heardSpans = [], expertSpans = [];
 
   const SAY = { C: "C", "C#": "C sharp", D: "D", "D#": "E flat", E: "E", F: "F", "F#": "F sharp", G: "G",
                 "G#": "A flat", A: "A", "A#": "B flat", B: "B" };
@@ -259,73 +310,101 @@
 
   function hsv(h, s, v) {
     const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
-    return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
+    return [f(5), f(3), f(1)].map((x) => Math.round(x * 255));
   }
+  const css = (rgb) => `rgb(${rgb.join(", ")})`;
   // The light at its colour and level; the wall gets a dim, flat spill of it.
-  const lightColour = ([h, s, b]) => hsv(h, s / 100, 0.18 + 0.82 * b / 100);
-  const wallColour = ([h, s, b]) => hsv(h, (s / 100) * 0.85, 0.05 + 0.2 * b / 100);
+  const lightRGB = ([h, s, b]) => hsv(h, s / 100, 0.18 + 0.82 * b / 100);
+  const lightColour = (c) => css(lightRGB(c));
+  const wallColour = ([h, s, b]) => css(hsv(h, (s / 100) * 0.85, 0.05 + 0.2 * b / 100));
+  const luminance = (rgb) => rgb.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; })
+    .reduce((sum, x, i) => sum + x * [0.2126, 0.7152, 0.0722][i], 0);
 
-  function frameAt(t) {
-    const i = Math.max(0, Math.min(data.frames.length - 1, Math.round(t * 10) - 1));
-    return i;
-  }
+  const frameAt = (t) => Math.max(0, Math.min(data.frames.length - 1, Math.round(t * 10) - 1));
 
   function paintBand() {
     const w = band.clientWidth, h = band.clientHeight, dpr = window.devicePixelRatio || 1;
     band.width = Math.round(w * dpr); band.height = Math.round(h * dpr);
     const ctx = band.getContext("2d");
     const cols = data.colours[mood], n = cols.length;
-    const step = Math.max(1, Math.floor(n / (w * dpr)));
     for (let x = 0; x < band.width; x++) {
-      const i = Math.min(n - 1, Math.floor((x / band.width) * n));
-      ctx.fillStyle = lightColour(cols[i]);
+      ctx.fillStyle = lightColour(cols[Math.min(n - 1, Math.floor((x / band.width) * n))]);
       ctx.fillRect(x, 0, 1, band.height);
     }
   }
 
-  function bars(el, spans) {
-    el.innerHTML = "";
+  // A span's fill: the light's own average colour across it, lifted if it would vanish on the wall.
+  function spanFill(a, b) {
+    const cols = data.colours[mood], from = frameAt(a), to = Math.max(from + 1, frameAt(b));
+    const sum = [0, 0, 0];
+    for (let i = from; i < to; i++) lightRGB(cols[i]).forEach((x, k) => { sum[k] += x; });
+    let rgb = sum.map((x) => x / (to - from));
+    if (luminance(rgb) < 0.08) rgb = rgb.map((x) => x * 0.7 + 195 * 0.3);
+    return css(rgb.map(Math.round));
+  }
+
+  function drawLane(el, spans, ticks, blooms, fill) {
+    el.replaceChildren();
     const d = data.duration;
     for (const [a, b, label] of spans) {
-      const i = document.createElement("i");
-      i.className = "loud";
-      i.style.left = `${(a / d) * 100}%`; i.style.width = `${Math.max(0.5, ((b - a) / d) * 100)}%`;
-      el.appendChild(i);
-      const t = document.createElement("b");
-      t.textContent = label; t.style.left = `${(a / d) * 100}%`;
-      el.appendChild(t);
+      const bar = document.createElement("i");
+      bar.style.left = `${(a / d) * 100}%`;
+      bar.style.width = `calc(${((b - a) / d) * 100}% - 2px)`;
+      if (fill) bar.style.background = spanFill(a, b);
+      el.append(bar);
+      const name = document.createElement("b");
+      name.textContent = label; name.style.left = `${(a / d) * 100}%`;
+      el.append(name);
+      // A name shows only where it fits inside its own span.
+      requestAnimationFrame(() => { name.style.visibility = name.offsetWidth + 8 <= bar.offsetWidth ? "visible" : "hidden"; });
     }
-    fitLabels(el);
-  }
-  // Longest spans keep their names first; a name that would touch another is hidden.
-  function fitLabels(el) {
-    const labels = [...el.querySelectorAll("b")];
-    labels.forEach((t) => { t.style.visibility = "visible"; t.dataset.span = t.previousSibling.offsetWidth; });
-    const kept = [];
-    labels.sort((p, q) => q.dataset.span - p.dataset.span).forEach((t) => {
-      const l = t.offsetLeft, r = l + t.offsetWidth;
-      const clash = r > el.clientWidth + 2 || kept.some(([kl, kr]) => l < kr + 10 && r > kl - 10);
-      if (clash) t.style.visibility = "hidden"; else kept.push([l, r]);
-    });
+    for (const t of ticks) {
+      const tick = document.createElement("i");
+      tick.className = "tick"; tick.style.left = `${(t / d) * 100}%`; tick.style.height = "14px";
+      el.append(tick);
+    }
+    for (const t of blooms) {
+      const tick = document.createElement("i");
+      tick.className = "bloom"; tick.style.left = `${(t / d) * 100}%`;
+      el.append(tick);
+    }
   }
 
   function buildLanes() {
-    const heard = [];
+    heardSpans = [];
     let start = 0, cur = data.frames[0][1];
     data.frames.forEach((f, i) => {
-      if (f[1] !== cur) { heard.push([start, f[0], NAMES[cur]]); start = f[0]; cur = f[1]; }
-      if (i === data.frames.length - 1) heard.push([start, f[0], NAMES[cur]]);
+      if (f[1] !== cur) { heardSpans.push([start, f[0], NAMES[cur]]); start = f[0]; cur = f[1]; }
+      if (i === data.frames.length - 1) heardSpans.push([start, f[0], NAMES[cur]]);
     });
-    bars($("heard"), heard.filter((s) => s[2] === "Breakdown" || s[2] === "Build" || s[2] === "Drop"));
-    const ex = [];
+    const shown = heardSpans.filter((s) => s[2] === "Breakdown" || s[2] === "Build" || s[2] === "Drop");
+    const blooms = data.frames.filter((f) => f[5]).map((f) => f[0])
+      .filter((t, i, all) => i === 0 || t - all[i - 1] > 4);  // one tick per bloom
+    drawLane($("heard"), shown, [], blooms, true);
+    expertSpans = [];
     if (data.marks) {
-      for (const [t, label] of data.marks) ex.push([t, t + 0.6, label]);
+      drawLane($("experts"), [], data.marks.map((m) => m[0]), [], false);
     } else {
-      for (const [a, b] of data.experts.build) ex.push([a, b, "Build"]);
-      for (const [a, b] of data.experts.break) ex.push([a, b, "Breakdown"]);
-      for (const t of data.experts.drop) ex.push([t, t + 1.5, "Drop"]);
+      for (const [a, b] of data.experts.build) expertSpans.push([a, b, "Build"]);
+      for (const [a, b] of data.experts.break) expertSpans.push([a, b, "Breakdown"]);
+      expertSpans.sort((p, q) => p[0] - q[0]);
+      drawLane($("experts"), expertSpans, data.experts.drop, [], false);
     }
-    bars($("experts"), ex.sort((p, q) => p[0] - q[0]));
+  }
+
+  function heardAt(t) {
+    return heardSpans.find(([a, b]) => t >= a && t < b) || heardSpans[heardSpans.length - 1];
+  }
+  // What the second row says near a moment, within `reach` seconds.
+  function secondAt(t, reach) {
+    if (data.marks) {
+      const before = data.marks.filter(([m]) => m <= t + 0.5 && t - m <= reach);
+      return before.length ? `Human expert: ${before[before.length - 1][1]} at ${fmt(before[before.length - 1][0])}` : null;
+    }
+    const span = expertSpans.find(([a, b]) => t >= a - 1 && t <= b + 1);
+    if (span) return `Experts: ${span[2]}, ${fmt(span[0])} to ${fmt(span[1])}`;
+    const drop = data.experts.drop.find((x) => Math.abs(x - t) <= Math.max(reach / 2, 3));
+    return drop != null ? `Experts: Drop at ${fmt(drop)}` : null;
   }
 
   function show(t) {
@@ -333,10 +412,17 @@
     const i = frameAt(position), f = data.frames[i], c = data.colours[mood][i];
     tube.style.background = lightColour(c);
     root.style.setProperty("--wall", wallColour(c));
-    playhead.style.left = `${(position / data.duration) * 100}%`;
-    clock.textContent = `${fmt(position)} / ${fmt(data.duration)}`;
+    timeline.style.setProperty("--pos", `${(position / data.duration) * 100}%`);
+    $("clocknow").textContent = fmt(position);
+    $("clocksmall").textContent = `${fmt(position)} / ${fmt(data.duration)}`;
+    const heard = heardAt(position);
+    const heardText = heard[2] ? `Music mode: ${heard[2]} from ${fmt(heard[0])}.` : "Music mode: silence.";
+    const second = secondAt(position, 10);
+    const unmarked = data.marks ? data.marks.length === 0
+      : !data.experts.build.length && !data.experts.break.length && !data.experts.drop.length;
+    readout.textContent = unmarked ? heardText : `${heardText} ${second ? second + "." : data.marks ? "No mark near here." : "Experts: nothing marked here."}`;
     timeline.setAttribute("aria-valuenow", Math.round(position));
-    timeline.setAttribute("aria-valuetext", fmt(position));
+    timeline.setAttribute("aria-valuetext", `${fmt(position)}, music mode hears ${heard[2] ? heard[2].toLowerCase() : "silence"}`);
     // A bloom is one moment; keep its words up for the bloom's hold.
     const recentBloom = data.frames.slice(Math.max(0, i - 40), i + 1).some((g) => g[5]);
     const key = f[1] === "breakdown" && recentBloom ? "bloom" : f[1];
@@ -351,6 +437,10 @@
   }
 
   function tick() {
+    if (playing && player && player.clock && !dragging && performance.now() - anchorAt > 250) {
+      const t = player.clock();
+      if (t != null) { anchorPos = t; anchorAt = performance.now(); }
+    }
     if (playing) {
       const t = anchorPos + (performance.now() - anchorAt) / 1000;
       show(t);
@@ -383,35 +473,54 @@
   document.querySelectorAll(".moods button").forEach((b) => b.addEventListener("click", () => {
     mood = b.dataset.mood;
     document.querySelectorAll(".moods button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
-    paintBand(); show(position);
+    paintBand(); buildLanes(); show(position);
   }));
 
   const fromPointer = (e) => {
     const r = band.getBoundingClientRect();
-    return ((e.clientX - r.left) / r.width) * data.duration;
+    return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * data.duration;
   };
+  function hover(e) {
+    if (!data) return;
+    const r = band.getBoundingClientRect();
+    const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+    const t = (x / r.width) * data.duration;
+    ghost.style.left = `${x}px`;
+    const near = secondAt(t, 3);
+    tip.textContent = near ? `${fmt(t)}, ${near}` : fmt(t);
+    const half = tip.offsetWidth / 2;
+    tip.style.left = `${Math.max(half + 8, Math.min(r.width - half - 8, x))}px`;
+  }
   let dragging = false;
-  timeline.addEventListener("pointerdown", (e) => { if (!data) return; dragging = true; timeline.setPointerCapture(e.pointerId); seek(fromPointer(e)); });
-  timeline.addEventListener("pointermove", (e) => { if (dragging) seek(fromPointer(e)); });
-  timeline.addEventListener("pointerup", () => { dragging = false; });
+  timeline.addEventListener("pointerdown", (e) => {
+    if (!data) return;
+    dragging = true; timeline.dataset.dragging = ""; timeline.setPointerCapture(e.pointerId);
+    seek(fromPointer(e)); hover(e);
+  });
+  timeline.addEventListener("pointermove", (e) => { hover(e); if (dragging) seek(fromPointer(e)); });
+  const endDrag = () => { dragging = false; delete timeline.dataset.dragging; };
+  timeline.addEventListener("pointerup", endDrag);
+  timeline.addEventListener("pointercancel", endDrag);
   timeline.addEventListener("keydown", (e) => {
     if (!data) return;
-    const moves = { ArrowRight: 10, ArrowLeft: -10, PageUp: 60, PageDown: -60 };
+    const step = e.shiftKey ? 1 : 10;
+    const moves = { ArrowRight: step, ArrowLeft: -step, PageUp: 60, PageDown: -60 };
     if (e.key in moves) { e.preventDefault(); seek(position + moves[e.key]); }
     if (e.key === "Home") { e.preventDefault(); seek(0); }
     if (e.key === "End") { e.preventDefault(); seek(data.duration); }
   });
 
-  // The SoundCloud player drives the light's clock when the colours come from that exact upload.
+  // SoundCloud's mini player: small, still attributed, and it drives the light's clock.
   const note = $("soundnote");
+  const playerSrc = (id) => `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://api.soundcloud.com/tracks/${id}`)}&visual=false&show_artwork=false&color=%23c3c8d6&show_user=true&hide_related=true&show_comments=false&show_reposts=false&auto_play=false`;
   function soundcloudPlayer(id) {
     const p = { ready: false };
     if (!window.SC) { note.textContent = "SoundCloud did not load, so this plays without sound."; return p; }
     const frame = document.createElement("iframe");
     frame.title = "The track on SoundCloud";
     frame.allow = "autoplay; encrypted-media";
-    frame.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://api.soundcloud.com/tracks/${id}`)}&color=%23eef0f6&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
-    $("player").className = "player"; $("player").replaceChildren(frame);
+    frame.src = playerSrc(id);
+    $("player").replaceChildren(frame);
     const w = SC.Widget(frame);
     const failed = setTimeout(() => { if (!p.ready) note.textContent = "The SoundCloud player did not answer, so this plays without sound."; }, 8000);
     w.bind(SC.Widget.Events.READY, () => {
@@ -427,45 +536,73 @@
     Object.assign(p, { play: () => w.play(), pause: () => w.pause(), seek: (s) => w.seekTo(s * 1000) });
     return p;
   }
-  // A track whose colours come from another version: the player is there to listen, not to drive the light.
-  function listenOnly(id) {
-    const frame = document.createElement("iframe");
-    frame.title = "The full track on SoundCloud";
-    frame.allow = "autoplay; encrypted-media";
-    frame.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://api.soundcloud.com/tracks/${id}`)}&color=%23eef0f6&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
-    $("player").className = "player"; $("player").replaceChildren(frame);
-    note.textContent = "This track's light plays on its own; the SoundCloud player below is the full version, to listen.";
-    return null;
+  // YouTube's player: no progress events, so the light reads its clock a few times a second.
+  let youtubeApi = null;
+  function youtubeReady() {
+    if (!youtubeApi) youtubeApi = new Promise((resolve, reject) => {
+      window.onYouTubeIframeAPIReady = () => resolve(window.YT);
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      tag.onerror = reject;
+      document.head.appendChild(tag);
+    });
+    return youtubeApi;
   }
+  function youtubePlayer(id) {
+    const p = { ready: false };
+    const holder = document.createElement("div");
+    $("player").classList.add("video"); $("player").replaceChildren(holder);
+    const failed = setTimeout(() => { if (!p.ready) note.textContent = "The YouTube player did not answer, so this plays without sound."; }, 8000);
+    youtubeReady().then((YT) => {
+      const y = new YT.Player(holder, {
+        videoId: id, width: "100%", playerVars: { rel: 0, playsinline: 1 },
+        events: {
+          onReady: () => { clearTimeout(failed); p.ready = true; note.textContent = "Sound comes from YouTube. Turn it up."; },
+          onStateChange: (e) => {
+            if (e.data === YT.PlayerState.PLAYING) { position = y.getCurrentTime(); setPlaying(true); }
+            if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) setPlaying(false);
+          },
+        },
+      });
+      Object.assign(p, { play: () => y.playVideo(), pause: () => y.pauseVideo(), seek: (s) => y.seekTo(s, true),
+                         clock: () => (typeof y.getCurrentTime === "function" ? y.getCurrentTime() : null) });
+    }).catch(() => { note.textContent = "YouTube did not load, so this plays without sound."; });
+    return p;
+  }
+
   const cache = {};
   function load(name) {
     track = name;
     const t = TRACKS[name];
     $("trackname").textContent = t.name;
     $("honest").textContent = t.honest;
-    $("secondname").textContent = t.second;
+    const [secondName, secondNote] = t.second.split(" (");
+    $("secondname").replaceChildren(secondName, ...(secondNote ? [Object.assign(document.createElement("small"), { textContent: secondNote.replace(/\)$/, "") })] : []));
     document.querySelectorAll(".tracks button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.track === name)));
     if (playing) { player && player.ready ? player.pause() : null; setPlaying(false); }
-    playBtn.disabled = true;
+    playBtn.disabled = true; timeline.setAttribute("aria-disabled", "true");
     if (!cache[name]) { now.textContent = "Loading the light."; detail.textContent = "The track's colours are on their way."; }
     const got = cache[name] ? Promise.resolve(cache[name]) : fetch(t.file).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     return got.then((d) => {
-      playBtn.disabled = false;
+      playBtn.disabled = false; timeline.removeAttribute("aria-disabled");
       cache[name] = d; data = d;
       timeline.setAttribute("aria-valuemax", Math.round(d.duration));
+      $("clocklen").textContent = `of ${fmt(d.duration)}`;
       paintBand(); buildLanes(); show(0);
       lastSection = null; now.textContent = "Press play."; detail.textContent = "The light waits in the dark.";
       note.textContent = "";
-      player = t.soundcloud ? soundcloudPlayer(t.soundcloud) : listenOnly(t.listen);
+      $("player").classList.remove("video");
+      player = t.youtube ? youtubePlayer(t.youtube) : soundcloudPlayer(t.soundcloud);
     }).catch(() => { now.textContent = "The track's colours did not load."; detail.textContent = "Reload the page to try again."; });
   }
   document.querySelectorAll(".tracks button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.track !== track) load(b.dataset.track); }));
   // A link like #visionary/t=165 opens a track at a moment.
-  const deep = location.hash.match(/^#(missyou|visionary|atlantis)?\/?(?:t=(\d+))?$/);
+  const deep = location.hash.match(/^#([a-z]+)?\/?(?:t=(\d+))?$/);
+  if (deep && deep[1] && !TRACKS[deep[1]]) deep[1] = null;
   if (deep && deep[1]) track = deep[1];
   load(track).then(() => {
     if (deep && deep[2]) { show(Number(deep[2])); anchorPos = position; }
-    window.addEventListener("resize", () => { paintBand(); fitLabels($("heard")); fitLabels($("experts")); });
+    window.addEventListener("resize", () => { paintBand(); buildLanes(); });
     requestAnimationFrame(tick);
   });
 })();

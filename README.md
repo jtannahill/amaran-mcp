@@ -13,14 +13,15 @@ Two things it is for:
 <a href="https://jtannahill.github.io/amaran-mcp/">
 <picture>
   <source media="(max-width: 600px)" srcset="docs/hero-narrow.svg">
-  <img alt="A light tube changing colour through a Creative Commons track as music mode would drive it: blue and violet through the groove, pale when the kick drops out, warming to orchid as the breakdown's chords lift, open at the drop. Below it, the sections music mode heard." src="docs/hero-wide.svg">
+  <img alt="A light tube changing colour through Craig Connelly and Nicholas Gunn's Miss You as music mode drives it: blues and violets through the drops, warmer through the breakdown, full at the final drop. Below it, the sections music mode heard." src="docs/hero-wide.svg">
 </picture>
 </a>
 
-**[Play a breakdown](https://jtannahill.github.io/amaran-mcp/)**: watch the light
-do what music mode does, second by second, on Craig Connelly's "Miss You" next
-to what the project's owner called out while listening, and on two Creative Commons
-tracks next to what experts marked.
+**[Play a breakdown](https://jtannahill.github.io/amaran-mcp/)**: press play on
+a vocal trance track and watch the light do what music mode does, second by
+second, in step with the music: Craig Connelly's "Miss You" next to what a
+human expert marked while listening, nilsix and Clara Yates's "Through It
+All", and Ferry Corsten's "Persiste" from A State of Trance 1300.
 
 An MCP server for Claude Code (or any MCP client) and a small CLI, for the
 [amaran PT2c](https://amarancreators.com/pages/amaran-pt2c) pixel tube and other Sidus Mesh lights. Not affiliated with or
@@ -30,7 +31,7 @@ endorsed by Aputure or amaran.
 [Setup](#setup) · [Tools](#tools) ·
 [What's next](#next) ·
 [How it reaches the light](#how-it-reaches-the-light) ·
-[Research](docs/research.md)
+[Research](https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md)
 
 ## Music mode
 
@@ -61,7 +62,7 @@ habits are built in:
 | A radio host talking over the mix | Apple's classifier tells speech from singing: talk never blooms |
 
 Why this matters for the model, and what the training data lacks:
-[Vocal trance at 138 BPM](docs/research.md#vocal-trance-at-138-bpm).
+[Vocal trance at 138 BPM](https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md#vocal-trance-at-138-bpm).
 
 ### What listens
 
@@ -104,7 +105,7 @@ over the five sections; the others are F scores for finding a start within a
 few seconds. Rules are the hand-written logic the model replaced.
 Trance breakdowns are the weakest spot, which is why it also learns from your
 own listening (below). The full research, every measurement and how to
-retrain: [docs/research.md](docs/research.md).
+retrain: [docs/research.md](https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md).
 
 ### What the light does
 

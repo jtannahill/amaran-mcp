@@ -5,16 +5,25 @@ what real music taught it, the models, the datasets and how every number here
 can be reproduced. No audio is in this repository. Public datasets are
 downloaded to `~/datasets`; the owner's own recordings stay on their Mac.
 
+<a href="https://jtannahill.github.io/amaran-mcp/">
+<picture>
+  <source media="(max-width: 600px)" srcset="hero-narrow.svg">
+  <img alt="The light's colour through Craig Connelly and Nicholas Gunn's Miss You as music mode drives it, with the sections it heard." src="hero-wide.svg">
+</picture>
+</a>
+
+*The light through a whole track, as music mode drives it. [Play it with sound](https://jtannahill.github.io/amaran-mcp/).*
+
 ## At a glance
 
-| | |
+| Part | What it is |
 |---|---|
 | **Listens with** | A Core Audio process tap (system audio, no microphone) and **Apple SoundAnalysis**, the on-device sound classifier, for singing versus speech |
 | **Hears** | Tempo, kick in or out, chords and the minor-to-major lift, tension, openness, voice |
 | **Decides sections with** | A 50/50 blend of **gradient-boosted trees** and a **spectrogram CNN**, trained on 402 Creative Commons EDM tracks |
 | **Section accuracy** | 0.49 balanced on unseen tracks (hand-written rules 0.36) |
 | **Runs** | numpy only at runtime, 13 ms once a second |
-| **Tempo** | 97% right on trance, 86% on house (GiantSteps, 100 to 150 BPM) |
+| **Tempo** | 97% right on trance, 85% on house (GiantSteps); searched from 100 to 160 BPM |
 | **Weakest spot** | Finding breakdown starts: about one in ten within a few seconds |
 
 Contents: [what it is for](#what-music-mode-is-for) ·
@@ -26,7 +35,7 @@ Contents: [what it is for](#what-music-mode-is-for) ·
 [Apple's sound classifier](#voice-apples-on-device-sound-classifier) ·
 [the section model](#sections-the-trained-model) ·
 [live check](#live-check-the-whole-pipeline-on-36-tracks) ·
-[the first marked session](#the-first-marked-session-miss-you-asot-1180) ·
+[the first marked session](#the-first-marked-session-miss-you) ·
 [colour](#colour-trance-wants-saturation) ·
 [tempo](#tempo-giantsteps) · [key](#key-beatport-edm-key) ·
 [the demo](#the-demo-page) · [open questions](#open-questions) ·
@@ -78,18 +87,11 @@ each point means for music mode.
 | Words make a track memorable, sung or a single sample | MasterClass, "Working With Lyrics and Vocals" ([TheTVDB](https://thetvdb.com/series/masterclass/episodes/7545311)) | The vocal is worth its own signal: Apple's singing class |
 | Making a trance tune, he already knows which singers to book and which chords the breakdown will use | [Skiddle, 2017](https://www.skiddle.com/news/all/Armin-Van-Buuren-interview-A-State-Of-Trance/32493/) | Chord change and vocal entry are deliberate, repeatable events, so detecting them is reasonable |
 | What sets trance apart is the euphoria and its melodies, drawn from classical music; euphoria is the rush people come for | [Oxford Student, 2013](https://www.oxfordstudent.com/2013/05/30/the-lord-of-the-trance/), [Beatportal](https://www.beatportal.com/articles/797170-beatportal-exclusive-armin-van-buuren-discusses-euphoria-and-the-future-of-dance-music) | The bloom answers the melody and harmony, not the beat |
-| Trance works toward a climax; a set moves from about 122 or 125 up to 140 or 145 BPM | [Time Out Chicago, 2008](https://www.timeout.com/chicago/clubs/armin-van-buuren), [OC Weekly, 2013](https://www.ocweekly.com/?p=133489) | Tempo is searched across 100 to 150 BPM, never assumed to be 138 |
+| Trance works toward a climax; a set moves from about 122 or 125 up to 140 or 145 BPM | [Time Out Chicago, 2008](https://www.timeout.com/chicago/clubs/armin-van-buuren), [OC Weekly, 2013](https://www.ocweekly.com/?p=133489) | Tempo is searched across 100 to 160 BPM, never assumed to be 138 |
 | Club rules hold tracks to about 128 to 140 BPM; "Mr Navigator" is a 138 track he plays in every set | [Deezer, 2019](https://newsroom-deezer.com/2019/11/armin-van-buuren-hid-a-secret-message-to-his-son-in-the-new-album-balance/) | 138 is a home, not a rule |
 | He complained that everything had become about the drop and the breakdown, and would rather take people on a journey | [EDMTunes, 2013](https://www.edmtunes.com/?p=29382) | Grooves deserve colour too, not only the peaks |
 | He makes quick edits of tracks for his sets, and A State of Trance is mixed and edited in Ableton Live; he skips the second breakdown at festivals | [Ableton](https://www.ableton.com/en/pages/artists/armin_van_buuren/), [The AU Review](https://www.theaureview.com/music/the-au-interview-armin-van-buuren-netherlands/) | Radio-show cuts are compressed (seen on the first marked session); a second breakdown cannot be counted on |
 | A pop single becomes a club mix by extending and rearranging it | MasterClass, "Singles, Club Mixes, and Edits" ([TheTVDB](https://thetvdb.com/series/masterclass/episodes/7545315)) | Radio edit and extended mix are different maps of the same song: colours must come from the version that plays |
-
-Two points could only be seen in search summaries, because the pages refuse
-automated access, and are not relied on: that in his MasterClass the chords
-play before the breakdown and the melody enters only in it, returning in full
-at the drop, and that DJ Mag reported him calling melody the most important
-ingredient in trance. Armada Music's own news site and its founders had
-nothing published on arrangement.
 
 He gives no single answer to whether the breakdown or the drop is the peak:
 his teaching treats the breakdown as the emotional payoff and the drop as the
@@ -157,6 +159,25 @@ The plan follows from it:
 
 ## What music mode hears
 
+```mermaid
+flowchart LR
+    A["System audio<br/>(Core Audio tap)"] --> B["Apple SoundAnalysis<br/>singing, speech"]
+    A --> C["Tempo and kick"]
+    A --> D["Chords and lift"]
+    A --> E["Tension, openness"]
+    A --> F["Spectral summary"]
+    B --> G["Section model<br/>trees + CNN"]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+    G --> H["State machine<br/>musical order, 8 s minimum"]
+    H --> I["Renderer<br/>slow colour, slew-limited"]
+    D --> I
+    B --> I
+    I --> J["The light"]
+```
+
 | Reading | How | Module |
 |---|---|---|
 | Audio | Core Audio process tap on the system output, mono float PCM to the analyser | `music/systemtap.swift` |
@@ -193,7 +214,9 @@ speech, singing, choir singing, rapping, synthesizer, bass drum, crowd and
 applause. The capture helper runs it on the same audio it hands the analyser,
 on the Mac, with no network. Music mode turns it into one number:
 
-> vocal = max(singing, choir) × (1 − 2 × max(0, speech − 0.5))
+```math
+\text{vocal} = \max(\text{singing}, \text{choir}) \times \bigl(1 - 2\max(0,\ \text{speech} - 0.5)\bigr)
+```
 
 so singing makes a bloom bigger and a host talking over the mix never counts.
 The helper also classifies files (`--classify-file`), so training features
@@ -240,7 +263,18 @@ beats the hand-written rules.
 
 ### Results
 
-Held out, pooled over 402 tracks:
+Held out, pooled over 402 tracks. Higher is better in every panel; the scales
+differ, so each panel has its own.
+
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="figures/models-narrow-dark.svg">
+  <source media="(max-width: 600px)" srcset="figures/models-narrow-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="figures/models-wide-dark.svg">
+  <img alt="Bar charts of four measures for four section models: hand-written rules, trees, spectrogram CNN and the shipped blend. The blend is best at the right section (0.49) and at drops (0.20); the CNN is best at breakdown starts (0.11); the trees at build starts (0.08)." src="figures/models-wide-light.svg">
+</picture>
+
+<details>
+<summary>The numbers, with the MLP that did not ship</summary>
 
 | Model | Balanced accuracy | Breakdown starts F | Build starts F | Release F |
 |---|---|---|---|---|
@@ -253,6 +287,8 @@ Held out, pooled over 402 tracks:
 The trees row is after the tempo tuning; before it they scored 0.490, 0.083,
 0.090 and 0.190 on features music mode no longer computes. The rules drop to
 0.345 balanced with the tuned tempo tracker.
+
+</details>
 
 The two models are good at different things: the CNN finds breakdown starts
 best, the trees are better overall and at drops. The blend doubles the
@@ -292,38 +328,69 @@ not see:
 | Seconds matching the experts | 75% | 74% |
 | Tracks with at least one bloom | 17 | 17 |
 
-## The first marked session: Miss You (ASOT 1180)
+## The first marked session: Miss You
 
-Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You", the 4:14 cut
-from A State of Trance episode 1180, played on the owner's Mac on 2026-10-26
-while they called out what they heard (22 marks, typed, so a few seconds
-late). The background listener recorded it; the whole pipeline then ran on
-the recording, with Apple's classifier and the shipped model.
+Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You". The owner
+played the 4:14 cut from A State of Trance episode 1180 on 2026-10-26 and
+called out what they heard: 22 marks, typed live, so each lands a few seconds
+late. Those marks are the human expert row below.
 
-| The owner called | Music mode heard | |
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="figures/missyou-narrow-dark.svg">
+  <source media="(max-width: 600px)" srcset="figures/missyou-narrow-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="figures/missyou-wide-dark.svg">
+  <img alt="A colour band for the whole of Miss You, with the sections music mode heard below it (drops at 1:17, 1:50 and 3:24, a breakdown at 2:13 with two blooms, a build at 2:44) and the human expert's 20 marks as ticks; the climaxes at 1:15 and 3:24 line up with music mode's drops." src="figures/missyou-wide-light.svg">
+</picture>
+
+How the comparison was made, so both rows describe the same audio:
+
+1. **Silent capture.** The full 5:05 upload was played in Chrome and recorded
+   with the audio helper's new app-only, muted tap (`tools/capture_app.py`), so
+   it was captured without being heard.
+2. **Carrying the marks across.** The radio cut leaves parts out, so each 8 s
+   stretch of it was matched to the full version by spectrogram similarity,
+   keeping only matches that move forward in time (`tools/align_versions.py`).
+   The cut starts 6.9 s into the full version and skips about 14 s near the
+   first minute and 3 s later on. 20 of the 22 marks carried over; the other
+   two fall in the DJ's blend at the ends.
+3. **The light.** The whole pipeline ran on the capture
+   (`tools/demo_timeline.py`): Apple's classifier, the analyser with the
+   shipped model, and every mood's renderer.
+
+| The human expert called | Music mode heard | |
 |---|---|---|
-| Vocal at 0:10 | Singing from 0:04 (classifier 0.39) | Agrees |
-| Build 0:41, climax 0:59 | Groove to 1:04 | Missed |
-| Lift at 1:26 | Breakdown from 1:04, bloom at 1:22 | Agrees |
-| Lifts at 1:40 and 2:12, builds, a crescendo at 2:09 | Breakdown at 2:00, bloom at 2:03 | Partly |
-| Climax from 2:38, top of the climax at 3:13 | Drop at 3:14 | Late for the climax, on time for its top |
-| Steady groove at 3:36 | Groove at 3:45 | Close |
+| Climax at 1:15 | Drop at 1:17 | Agrees |
+| Climax at 3:24 | Drop at 3:24 | Agrees, to the second |
+| Lifts from 2:48 to 3:16 | Breakdown from 2:13, blooms at 2:23 and 2:37 | Blooms come early |
+| Lifts at 1:47 and 2:01 | Drops at 1:50 and 2:04 | Disagree |
+| Builds at 0:17 and 0:48 | Groove | Missed |
 
-The bloom landed on the owner's lifts twice; builds and the first climax of a
-compressed radio-show cut are what it misses. The owner also used words the
+Drops agree; the breakdown's lifts are where music mode is early or wrong,
+which is the part the owner cares about most. The owner also used words the
 model has no class for, "crescendo" and "top of the climax", which suggests
 the drop needs a rising part and a peak. This is the first session for the
 local, trance-only model.
 
+The capture clipped about 1% of samples, because Core Audio's mono mixdown of
+a stereo app reaches twice full scale; the capture tool now scales such a
+capture down instead.
+
 ## Colour: trance wants saturation
 
-The first palettes were too pale for trance: on the two demo tracks the
+The first palettes were too pale for trance: on two Creative Commons tracks the
 default mood averaged 34 to 39 saturation and spent about half its time below
 30, which reads as grey, and breakdowns, the centrepiece, averaged 24. The
 causes were a near-white palette stop, colour thinned at low energy, a pale
 breakdown opening at 25, and blooms that turned whiter. Now the palettes are
 saturated, blooms and openness read luminous through brightness, and the
 breakdown opens at 40 before its chords take over.
+
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="figures/colour-narrow-dark.svg">
+  <source media="(max-width: 600px)" srcset="figures/colour-narrow-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="figures/colour-wide-dark.svg">
+  <img alt="Two colour bands for the same track: before the change, greys and pale lilacs; after it, saturated blues, violets, orchids and a warm breakdown." src="figures/colour-wide-light.svg">
+</picture>
 
 | Default mood (`ethereal`), two tracks | Before | After |
 |---|---|---|
@@ -346,6 +413,16 @@ confidence rarely reached the threshold tuned on synthetic kicks (0.55). The
 threshold was swept on 417 previews; Accuracy 1 for tracks between 100 and
 150 BPM:
 
+<picture>
+  <source media="(prefers-color-scheme: dark) and (max-width: 600px)" srcset="figures/tempo-narrow-dark.svg">
+  <source media="(max-width: 600px)" srcset="figures/tempo-narrow-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="figures/tempo-wide-dark.svg">
+  <img alt="Line chart of tempo accuracy against the confidence threshold for trance, house and all tracks; lowering it from 0.55 to 0.25, the chosen value, lifts trance from 75% to 97% and house from 33% to 86%." src="figures/tempo-wide-light.svg">
+</picture>
+
+<details>
+<summary>The sweep as a table</summary>
+
 | Threshold | Trance (68) | House (73) | All (276) |
 |---|---|---|---|
 | 0.55 (synthetic) | 75.0% | 32.9% | 39.1% |
@@ -354,11 +431,28 @@ threshold was swept on 417 previews; Accuracy 1 for tracks between 100 and
 | **0.25 (chosen)** | **97.1%** | **86.3%** | **78.6%** |
 | 0.20 | 97.1% | 87.7% | 84.4% |
 
+</details>
+
 Lowering it exposed two things the synthetic tests had not: sidechain pumping
 of a held sub-bass reads as a beat at the track's tempo, and a sudden level
 jump reads as one kick. Kick presence now also needs a sharp attack, and a
 confirmed-kick release needs the kick to last 0.75 s. On the owner's ASOT clip
 a false release at 1:48 disappeared with these changes.
+
+A State of Trance now plays hard trance at 150 BPM and beyond (episode 1300
+included), so the search was widened from 100 to 150 BPM to 100 to 160 BPM.
+On all 664 previews:
+
+| GiantSteps, Accuracy 1 | Search to 150 | Search to 160 |
+|---|---|---|
+| Trance (74) | 97.3% | 97.3% |
+| House (23) | 73.9% | 73.9% |
+| Progressive house (19) | 78.9% | 84.2% |
+| All 664 | 48.9% | 49.5% |
+| Tracks from 100 to 150 BPM (428) | 75.5% | 75.0% |
+
+Two tracks in the usual range now lock at a wrong multiple of their tempo;
+in exchange, anything from 150 to 160 BPM can be heard at all.
 
 ## Key: Beatport EDM Key
 
@@ -385,12 +479,12 @@ time, and the learned profiles are not wired in.
 
 ## The demo page
 
-[Play a breakdown](https://jtannahill.github.io/amaran-mcp/) plays two SSME
-tracks from SoundCloud and drives an on-screen tube from colours computed
-offline by the real pipeline (the classifier, the analyser with the shipped
-model, and all three moods' renderers), stored once per 0.1 s. Only the
-colours and section calls are in the repository, never the audio. The tracks
-were picked because music mode gets them mostly right, and the page says so.
+[Play a breakdown](https://jtannahill.github.io/amaran-mcp/) plays each track
+from its official upload and lights an on-screen tube with the colours music
+mode computed for that exact recording, stored once every 0.1 s. Play, the
+colour band and the music stay in step because the light follows the player's
+own clock. Only colours, section calls and marks are in the repository, never
+audio.
 
 ## Open questions
 
@@ -404,6 +498,9 @@ were picked because music mode gets them mostly right, and the page says so.
   recovery (WHOOP) to modulate the light alongside the music. Not started.
 
 ## Reproduce everything
+
+<details>
+<summary>Every command, from datasets to the shipped model and the demo page</summary>
 
 ```sh
 # Tempo and key
@@ -420,3 +517,13 @@ uv run python tools/train_cnn.py --mel ~/datasets/mel/ssme --epochs 12 --final c
 uv run python tools/make_ensemble.py --trees src/amaran_mcp/music/sections.npz --cnn cnn.npz \
   --weight 0.5 --out src/amaran_mcp/music/sections.npz
 ```
+
+# The demo page: capture a track silently, carry marks across, compute the light
+uv run python tools/capture_app.py track.wav --seconds 330 --mute
+uv run python tools/align_versions.py cut.wav track.wav --marks marks.json --start SECONDS --out full-marks.json
+uv run python tools/demo_timeline.py track.wav --marks full-marks.json --out docs/missyou.json
+uv run python tools/demo_hero.py docs/missyou.json docs --still 150
+uv run python tools/research_figures.py --out docs/figures
+```
+
+</details>
