@@ -301,6 +301,11 @@ class Analyzer:
         self._build_time = self._build_time + dt if rising else 0.0
 
         section = self.section
+        # Every section lasts its minimum, whoever entered it; only silence and an
+        # intro's end may come sooner. (On Miss You the rules undid a build 2 s in.)
+        if section in ("groove", "breakdown", "build", "climax") and \
+                self._now - self._section_since < section_model.MIN_STAY:
+            return False
         if self.model is not None and self._model_sure and section in ("groove", "breakdown", "build", "climax"):
             # The model owns changes among these while it is sure (start-up,
             # silence and intro stay with the rules: SSME has no intro); the fast release

@@ -174,3 +174,30 @@ def test_ensemble_model_gets_features_and_mel():
     fs = feed_in_blocks(a, kick_track(RATE, 30))
     assert stub.inputs and set(stub.inputs) == {((sections.WINDOW_SIZE,), (sections.MEL_FRAMES, 64))}
     assert fs[-1].section == "breakdown"
+
+
+class SureThenUnsure(StubModel):
+    """Sure of one section for its first `sure` calls, then sure of nothing."""
+
+    def __init__(self, section, sure):
+        super().__init__(section)
+        self.calls, self.sure = 0, sure
+
+    def proba(self, x):
+        self.calls += 1
+        if self.calls <= self.sure:
+            return super().proba(x)
+        return {s: 0.2 for s in ("intro", "groove", "breakdown", "build", "climax")}
+
+
+def test_rules_do_not_undo_a_section_before_its_minimum():
+    # Seen on Miss You at 1:48: the model entered a build, went unsure two seconds
+    # later, and the rules, hearing the kick, sent it straight back to a drop.
+    from amaran_mcp.music import sections
+    a = Analyzer(RATE, model=SureThenUnsure("build", sure=5))
+    fs = feed_in_blocks(a, kick_track(RATE, 40))
+    names = [f.section for f in fs]
+    assert "build" in names
+    start = names.index("build")
+    lasted = next((i for i in range(start, len(names)) if names[i] != "build"), len(names)) - start
+    assert lasted * 1024 / RATE >= sections.MIN_STAY - 0.5
