@@ -197,12 +197,13 @@ async def recall_scene(name: str) -> dict[str, Any]:
 @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
 async def start_music_mode(
     mood: Annotated[str, Field(description="ethereal (default), deep or dawn")] = "ethereal",
+    record: Annotated[bool, Field(description="save the session on this Mac for training (default on)")] = True,
 ) -> dict[str, Any]:
     """Start music mode: the light follows what this Mac is playing (including AirPlay from an iPhone) with slow, ethereal colour. Moods: ethereal, deep, dawn."""
 
     if mood not in MOODS:
         raise ValueError(f"Unknown mood {mood!r}. Moods: {', '.join(MOODS)}")
-    return control.start(mood)
+    return control.start(mood, record=record)
 
 
 @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
@@ -212,3 +213,17 @@ async def stop_music_mode() -> str:
     if control.stop():
         return "music mode stopped; the light is back to how it was"
     return "music mode was not running"
+
+
+@tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+async def mark_music_moment(
+    kind: Annotated[str, Field(description="breakdown, lift, vocal, build, drop or other")],
+    note: str | None = None,
+) -> str:
+    """Flag this moment in the music mode recording ("the chords just lifted"), for training. Call it the moment the user says so."""
+
+    try:
+        control.mark(kind, note)
+    except RuntimeError as err:
+        return str(err)
+    return f"marked {kind}"

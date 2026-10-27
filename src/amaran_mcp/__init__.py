@@ -158,6 +158,7 @@ def main() -> None:
     parser.add_argument("--name", help="which light to import, if there are several")
     parser.add_argument("--mood", default="ethereal", help="music mode mood: ethereal, deep or dawn")
     parser.add_argument("--log-features", type=Path, help="music: write one JSON line per tick here")
+    parser.add_argument("--no-record", action="store_true", help="music: do not save the session")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
     if args.verbose:
@@ -173,7 +174,8 @@ def main() -> None:
             _import(args)
         elif args.command == "music":
             from .music.runner import RunnerConfig, run
-            raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood, log_features=args.log_features))))
+            raise SystemExit(asyncio.run(run(RunnerConfig(mood=args.mood, log_features=args.log_features,
+                                                          record=not args.no_record))))
         elif args.command == "music-record":
             from .music import clips
             seconds, name = float(args.values[0]), (args.values[1] if len(args.values) > 1 else "clip")

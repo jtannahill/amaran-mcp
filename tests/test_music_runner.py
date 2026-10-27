@@ -19,6 +19,8 @@ def runner(tmp_path, monkeypatch):
     monkeypatch.setenv("AMARAN_MCP_HOME", str(tmp_path))
     from amaran_mcp import config
     importlib.reload(config)
+    from amaran_mcp.music import recorder
+    importlib.reload(recorder)
     from amaran_mcp.music import runner as module
     importlib.reload(module)
     return module
@@ -137,3 +139,18 @@ def test_feature_log_writes_one_line_per_tick(runner, tmp_path):
     rows = [json.loads(line) for line in log.read_text().splitlines()]
     assert len(rows) > 50 and {"t", "section", "output"} <= rows[0].keys()
     assert any(row["output"] for row in rows)
+
+
+def test_recording_session_saves_audio_features_and_marks(runner):
+    import time
+    from amaran_mcp.music import recorder
+    runner.MARKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    runner.MARKS_PATH.write_text(json.dumps({"wall": time.time(), "kind": "lift", "note": "test"}) + "\n")
+    asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=5, record=True),
+                           source=FakeSource([kick_track(RATE, 8), silence(RATE, 20)]),
+                           light=lambda: FakeLight(), music=lambda: None))
+    sessions = list(recorder.RECORDINGS_DIR.iterdir())
+    assert len(sessions) == 1
+    session = sessions[0]
+    assert list(session.glob("audio-*.flac")) and (session / "features.jsonl").stat().st_size > 0
+    assert json.loads((session / "marks.json").read_text())[0]["kind"] == "lift"

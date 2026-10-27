@@ -8,6 +8,7 @@ reads brightness changes from runner.CONTROL_PATH.
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 import os
 import signal
 import subprocess
@@ -65,16 +66,34 @@ def _spawn(argv: list[str]) -> int:
     return process.pid
 
 
-def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn) -> dict:
+def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, record: bool = True) -> dict:
     if mood not in MOODS:
         raise ValueError(f"Unknown mood {mood!r}. Moods: {', '.join(MOODS)}")
     if status():
         stop()
     runner.CONTROL_PATH.unlink(missing_ok=True)  # a new session starts at the mood's own range
-    pid = spawn([sys.executable, "-m", "amaran_mcp", "music", "--mood", mood])
+    runner.MARKS_PATH.unlink(missing_ok=True)
+    argv = [sys.executable, "-m", "amaran_mcp", "music", "--mood", mood]
+    pid = spawn(argv if record else argv + ["--no-record"])
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     PID_PATH.write_text(f"{pid}\n")
-    return {"running": True, "pid": pid, "mood": mood}
+    return {"running": True, "pid": pid, "mood": mood, "recording": record}
+
+
+def mark(kind: str, note: str | None = None) -> dict:
+    """Flag a moment in the session being recorded (music mode places it in time)."""
+
+    from .recorder import MARK_KINDS
+
+    current = status()
+    if not current or not current.get("recording"):
+        raise RuntimeError("music mode is not recording")
+    if kind not in MARK_KINDS:
+        raise ValueError(f"Mark kinds are: {', '.join(MARK_KINDS)}")
+    entry = {"wall": time.time(), "kind": kind, "note": note}
+    with open(runner.MARKS_PATH, "a") as marks:
+        marks.write(json.dumps(entry) + "\n")
+    return entry
 
 
 def stop(timeout: float = 8.0) -> bool:
