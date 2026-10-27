@@ -107,7 +107,29 @@ warm colours.
 uv run python tools/benchmark_key.py ~/datasets/beatport-edm-key
 ```
 
-Results: _in progress_.
+On 1,411 excerpts: MIREX score 41.9% overall (trance 48.7%, psy-trance
+49.0%), exact key 29.2%, and major/minor right only 49.1% of the time. Two
+thirds of the labels are minor, so always answering minor scores 67.2%: the
+textbook (Krumhansl) profiles were worse than useless at telling major from
+minor on EDM. Chroma variants (log, peaks only, whitened, without the sub-bass)
+and Temperley profiles did not fix it; the best "mode" score among them simply
+learned to say minor while key accuracy collapsed.
+
+Learned EDM key profiles (a logistic regression scoring each of the 12
+rotations of the chroma as major tonic, minor tonic or neither; trained on 15 s
+windows, held out by excerpt, 5 folds):
+
+| Profiles | MIREX | Major/minor |
+| --- | --- | --- |
+| Textbook (Krumhansl) | 41.6% | 49.5% |
+| Learned on EDM | **49.9%** | 68.3% |
+| Always minor | | 67.2% |
+
+The key itself improves by 8 points, but major versus minor stays at about the
+"always minor" rate: in dense EDM mixes it is hard to hear from chroma. Music
+mode therefore leans cool (minor colours) in breakdowns, which is right about
+two thirds of the time, and the owner's marked lifts are the evidence for
+whether the chord tracker's minor-to-major lifts can be trusted.
 
 ## 5. Machine learning
 
