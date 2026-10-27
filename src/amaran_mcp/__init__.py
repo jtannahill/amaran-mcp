@@ -54,7 +54,23 @@ def _music_probe(seconds: float) -> None:
 
     from .music.capture import CaptureError, helper_path
 
-    helper = subprocess.Popen([str(helper_path())], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    import os
+    import threading
+
+    read_fd, write_fd = os.pipe()
+    helper = subprocess.Popen([str(helper_path()), "--classify-fd", str(write_fd)], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, pass_fds=(write_fd,))
+    os.close(write_fd)
+    latest: dict = {}
+
+    def read_classes() -> None:
+        for line in os.fdopen(read_fd, "r"):
+            try:
+                latest.update(json.loads(line))
+            except ValueError:
+                pass
+
+    threading.Thread(target=read_classes, daemon=True).start()
     try:
         header = helper.stdout.readline().decode().split()
         if len(header) != 2 or header[0] != "RATE":
@@ -67,7 +83,9 @@ def _music_probe(seconds: float) -> None:
             peak = max((abs(v) for v in samples), default=0.0)
             rms = math.sqrt(sum(v * v for v in samples) / max(len(samples), 1))
             level = 20 * math.log10(rms) if rms > 0 else float("-inf")
-            print(f"{second + 1:3d}s  rms {level:7.1f} dBFS  peak {peak:.3f}")
+            top = sorted(((v, k) for k, v in latest.items() if k != "t"), reverse=True)[:3]
+            classes = "  ".join(f"{k} {v:.2f}" for v, k in top)
+            print(f"{second + 1:3d}s  rms {level:7.1f} dBFS  peak {peak:.3f}  {classes}")
     finally:
         helper.terminate()
         helper.wait(timeout=5)

@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 import hashlib
+import json
 import logging
+import os
 from pathlib import Path
 import subprocess
 from typing import Protocol
@@ -75,25 +77,70 @@ def _block_size(rate: int) -> int:
 
 
 class SystemAudio:
-    """What the Mac is playing, read from the helper's stdout."""
+    """What the Mac is playing, read from the helper's stdout.
+
+    With classify (the default) the helper also runs Apple's on-device sound
+    classifier and writes its confidences (singing, speech, ...) as JSON lines
+    on a separate pipe, so the audio stream is untouched. A helper that does
+    not know the flag is restarted without it.
+    """
 
     name = "system audio"
 
-    def __init__(self, command: list[str] | None = None) -> None:
+    def __init__(self, command: list[str] | None = None, classify: bool = True) -> None:
         self._command = command
+        self._classify = classify
         self._process: asyncio.subprocess.Process | None = None
+        self._classes: dict[str, float] | None = None
+        self._reader: asyncio.Task | None = None
+        self._transport: asyncio.ReadTransport | None = None
         self.rate = 0
+
+    def latest_classes(self) -> dict[str, float] | None:
+        return self._classes
 
     async def start(self) -> None:
         if self._process:
             return
         command = self._command or [str(helper_path())]
-        self._process = await asyncio.create_subprocess_exec(
-            *command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if self._classify:
+            read_fd, write_fd = os.pipe()
+            self._process = await asyncio.create_subprocess_exec(
+                *command, "--classify-fd", str(write_fd), stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, pass_fds=(write_fd,))
+            os.close(write_fd)
+            try:
+                await self._read_header()
+            except CaptureError as err:
+                os.close(read_fd)
+                if "unknown option" not in str(err):
+                    raise
+                log.info("audio helper has no classifier; continuing without it")
+                self._classify, self._process = False, None
+                await self.start()
+                return
+            self._reader = asyncio.get_running_loop().create_task(self._read_classes(read_fd))
+        else:
+            self._process = await asyncio.create_subprocess_exec(
+                *command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            await self._read_header()
+
+    async def _read_header(self) -> None:
         header = (await asyncio.wait_for(self._process.stdout.readline(), 15)).decode().split()
         if len(header) != 2 or header[0] != "RATE":
             raise CaptureError(await self._failure("the audio helper did not start"))
         self.rate = int(header[1])
+
+    async def _read_classes(self, fd: int) -> None:
+        loop = asyncio.get_running_loop()
+        reader = asyncio.StreamReader()
+        self._transport, _ = await loop.connect_read_pipe(
+            lambda: asyncio.StreamReaderProtocol(reader), os.fdopen(fd, "rb", buffering=0))
+        while line := await reader.readline():
+            try:
+                self._classes = json.loads(line)
+            except ValueError:
+                continue
 
     async def _failure(self, fallback: str) -> str:
         await self._process.wait()
@@ -112,6 +159,8 @@ class SystemAudio:
                 code = await self._process.wait()
                 if code not in (0, -15):
                     raise CaptureError(await self._failure("the audio helper stopped")) from None
+                if self._reader:  # let the last classifier lines arrive
+                    await asyncio.wait([self._reader], timeout=1)
                 return
             yield np.frombuffer(data, dtype="<f4").astype(np.float32)
 
@@ -123,6 +172,10 @@ class SystemAudio:
                 await asyncio.wait_for(process.wait(), 5)
             except TimeoutError:
                 process.kill()
+        if self._reader:
+            self._reader.cancel()
+        if self._transport:
+            self._transport.close()
 
 
 BLUETOOTH_NAMES = ("airpods", "beats", "bluetooth", "hands-free", "headset")
