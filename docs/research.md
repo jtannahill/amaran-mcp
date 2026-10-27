@@ -381,6 +381,31 @@ build or a drop can end. Agreement drops slightly because sections now hold
 their 8 s even where an expert's label changes sooner. To rerun:
 `uv run python tools/live_check.py`.
 
+### The live sample rate
+
+Every training track was decoded to 24 kHz, but a Mac plays at its output
+device's rate, usually 48 kHz, and until 2026-10-27 music mode analysed that
+audio as it came. Two inputs depend on the rate: the spectrogram's band power
+reads higher at 48 kHz, and the spectral centroid, which divides by a fixed
+11 kHz, more than doubled (0.23 to 0.52 on the same synthetic track). The
+live check had decoded to 24 kHz, so it measured the model as trained, not as
+it ran. Run at 48 kHz, it showed the gap:
+
+| On the same 36 tracks | Seconds matching the experts |
+|---|---|
+| Decoded at 24 kHz, the training rate | 72% |
+| At 48 kHz, as music mode ran live before the fix | 64% |
+| At 48 kHz, through the resampler | 72% |
+
+The analyser now resamples whatever it is given to 24 kHz first
+(`src/amaran_mcp/music/resample.py`). The resampler's low-pass copies the
+gentle roll-off of ffmpeg's default resampler, which decoded the training
+audio (0.82 at 11 kHz, 0.58 at 11.5 kHz). A sharper filter, flat to 11 kHz,
+reached only 69%: it kept more of the top band than the model had ever seen.
+As a control, the same tracks decoded to 24 kHz by a different converter
+(scipy, straight from 44.1 kHz) scored 71%, no track moving by more than 0.04.
+To rerun at the live rate: `uv run python tools/live_check.py --rate 48000`.
+
 ## The first marked session: Miss You
 
 Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You". A human expert

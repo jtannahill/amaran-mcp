@@ -19,6 +19,7 @@ import numpy as np
 from . import sections as section_model
 from .harmony import Harmony, HarmonyTracker
 from .mel import MelFrontend
+from .resample import ANALYSIS_RATE, Resampler
 from .spectral import Spectral
 from .tempo import Beat, TempoTracker
 from .timbre import Timbre, TimbreTracker
@@ -103,7 +104,11 @@ class _Follower:
 
 class Analyzer:
     def __init__(self, rate: int, model: "section_model.Model | None" = None) -> None:
-        self.rate = rate
+        # Live audio comes at the output device's rate (often 48 kHz); the model and
+        # every threshold were trained at 24 kHz, so all analysis runs at that rate.
+        self._resample = Resampler(rate)
+        rate = self.rate = ANALYSIS_RATE
+        self._features: Features | None = None
         # A trained section model, when present, proposes sections once a
         # second; the state machine still decides what is musically allowed.
         self.model = model
@@ -153,6 +158,12 @@ class Analyzer:
             self.section, self._section_since = section, self._now
 
     def feed(self, samples: np.ndarray, classes: dict[str, float] | None = None) -> Features:
+        # A non-finite sample would poison every follower for good; treat it as silence.
+        samples = self._resample(np.nan_to_num(samples, nan=0.0, posinf=0.0, neginf=0.0))
+        if not len(samples):
+            if self._features is not None:
+                return self._features  # nothing new to hear (a block too short to resample)
+            samples = np.zeros(1, dtype=np.float32)
         n = len(samples)
         dt = n / self.rate
         self._now += dt
@@ -214,7 +225,7 @@ class Analyzer:
             release = self._model_step(samples, release, relative_energy, bass_now, bass_ref, beat, harmony, timbre, dt) or release
         bloom = harmony.lift and self.section == "breakdown"
 
-        return Features(
+        self._features = Features(
             energy=relative_energy,
             bass=min(1.0, max(0.0, 0.5 * bass_now / bass_ref)) if bass_ref else 0.0,
             is_music=self.is_music,
@@ -227,6 +238,7 @@ class Analyzer:
             harmony=harmony,
             timbre=timbre,
         )
+        return self._features
 
     def _model_step(self, samples: np.ndarray, release: bool, energy: float, bass_now: float, bass_ref: float,
                     beat: Beat, harmony: Harmony, timbre: Timbre, dt: float) -> bool:
