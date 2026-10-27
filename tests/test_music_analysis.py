@@ -117,6 +117,23 @@ def test_model_proposal_is_followed_when_allowed():
     assert fs[-1].section == "breakdown"
 
 
+def test_a_sure_model_ends_an_intro_the_kick_test_missed():
+    # A rolling bass hides the kick from the rules (seen on a real track: four
+    # minutes of "intro"); a model sure of a build or a drop ends the intro.
+    a = Analyzer(RATE, model=StubModel("build"))
+    fs = feed_in_blocks(a, pads_only(RATE, 30))
+    assert fs[-1].section == "build"
+
+
+def test_a_model_calling_groove_or_breakdown_leaves_an_intro_alone():
+    # The model never saw an intro (SSME has none), so it calls one groove or
+    # breakdown: only the kick may end an intro then.
+    for section in ("groove", "breakdown"):
+        a = Analyzer(RATE, model=StubModel(section))
+        fs = feed_in_blocks(a, pads_only(RATE, 30))
+        assert fs[-1].section == "intro", section
+
+
 class StubMelModel(StubModel):
     input = "mel"
 

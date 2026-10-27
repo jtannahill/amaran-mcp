@@ -43,6 +43,7 @@ RELEASE_JUMP = 3.0  # low-band onsets in the last 0.5 s against the 8 s before
 RELEASE_PULSE = 0.45  # bass pulsing needed for a fast release (a swell pumps less)
 KICK_CONFIRM = 0.75  # seconds a kick must persist before it confirms a release (a level jump is one block)
 KICK_ARRIVES = 2.0  # seconds of kick that end an intro
+INTRO_EXITS = ("build", "climax")  # what a sure model may end an intro with (it calls intros groove)
 BREAKDOWN_BARS = 4  # kick gone this long after a groove
 BUILD_TENSION = 0.5
 BUILD_BARS = 2  # tension high and rising this long
@@ -245,10 +246,11 @@ class Analyzer:
         spectral = self._spectral_row if self._spectral_row is not None else np.zeros(Spectral.WIDTH, np.float32)
         self._spectral_row = None
         self._history.append(np.concatenate([row, spectral]))
-        if self.section in ("silence", "intro") or not self.is_music:
+        if self.section == "silence" or not self.is_music:
             self._decoder.follow("groove")
             return False
-        self._decoder.follow(self.section)
+        intro = self.section == "intro"
+        self._decoder.follow("groove" if intro else self.section)
         rows = np.array(self._history)
         features = section_model.window(rows, len(rows) - 1)
         if self._mel_input:
@@ -262,6 +264,8 @@ class Analyzer:
             proba = self.model.proba(features)
         self._model_sure = max(proba.values()) >= section_model.CONFIDENT
         proposed = self._decoder.step(proba)
+        if intro and proposed not in INTRO_EXITS:
+            return False
         if proposed != self.section:
             self._enter(proposed)
             if self._decoder.released:

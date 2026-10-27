@@ -156,3 +156,15 @@ def test_ensemble_blends_its_parts():
     got = model.proba((features, mel))
     a, b = sections.Model(trees).proba(features), sections.Model(cnn).proba(mel)
     assert all(abs(got[c] - (0.5 * a[c] + 0.5 * b[c])) < 1e-9 for c in classes)
+
+
+def test_a_section_entered_elsewhere_also_lasts_its_minimum():
+    # Seen live: a fast release entered a climax and the model sent it back to
+    # build 2 s later; the light swung to full and back.
+    decoder = sections.SectionDecoder()
+    build = {"breakdown": 0.0, "build": 0.9, "climax": 0.1, "groove": 0.0}
+    for _ in range(20):
+        decoder.step({"breakdown": 0.0, "build": 0.0, "climax": 0.1, "groove": 0.9})
+    decoder.follow("climax")
+    calls = [decoder.step(build) for _ in range(sections.MIN_STAY - 1)]
+    assert set(calls) == {"climax"}

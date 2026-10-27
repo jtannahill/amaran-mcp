@@ -248,4 +248,4 @@ class SectionDecoder:
         """Keep in step when something else (silence, a fast release) moved the section."""
 
         if section != self.section:
-            self.section, self._candidate, self._held = section, None, 0
+            self.section, self._candidate, self._held, self._stayed = section, None, 0, 0
