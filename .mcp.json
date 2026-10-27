@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "amaran": {
+      "command": "uv",
+      "args": ["--directory", "${CLAUDE_PLUGIN_ROOT}", "run", "amaran-mcp", "serve"]
+    }
+  }
+}

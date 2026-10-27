@@ -1,0 +1,10 @@
+{
+  "name": "amaran",
+  "version": "0.1.0",
+  "description": "Drive an amaran light from a Mac: studio lighting from a prompt, and a music mode that follows a trance track's sections, not its beat.",
+  "author": { "name": "James Tannahill", "url": "https://github.com/jtannahill" },
+  "homepage": "https://jtannahill.github.io/amaran-mcp/",
+  "repository": "https://github.com/jtannahill/amaran-mcp",
+  "license": "MIT",
+  "keywords": ["amaran", "lighting", "music", "trance", "mcp", "macos"]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "amaran-mcp",
+  "description": "amaran-mcp: drive an amaran light from Claude Code on a Mac.",
+  "owner": {
+    "name": "James Tannahill",
+    "url": "https://github.com/jtannahill"
+  },
+  "plugins": [
+    {
+      "name": "amaran",
+      "source": "./",
+      "description": "Drive an amaran light from a Mac: studio lighting from a prompt, and a music mode that follows a trance track's sections, not its beat."
+    }
+  ]
+}

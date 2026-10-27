@@ -95,6 +95,24 @@ def _music_probe(seconds: float) -> None:
 
 
 LAUNCH_AGENT = "com.jtannahill.amaran-listen"
+SOURCE = "git+https://github.com/jtannahill/amaran-mcp"
+
+
+def _listener_command(code: Path, which=None) -> list[str]:
+    """What the login item runs: a clone runs its own code, a `uv tool install` its
+    installed command; anything else (uvx, a Claude Code plugin) lives in a cache
+    that can be cleared or replaced, so it runs the published repo through uvx."""
+
+    import shutil
+
+    which = which or shutil.which
+    project = code.parents[2]
+    if (project / ".git").exists() and (project / "pyproject.toml").exists() \
+            and Path.home() / ".claude" not in project.parents:
+        return [which("uv") or "uv", "--directory", str(project), "run", "amaran-mcp", "listen"]
+    if installed := which("amaran-mcp"):
+        return [installed, "listen"]
+    return [which("uvx") or "uvx", "--from", SOURCE, "amaran-mcp", "listen"]
 
 
 def _launch_agent(install: bool) -> None:
@@ -102,7 +120,6 @@ def _launch_agent(install: bool) -> None:
 
     import os
     import plistlib
-    import shutil
     import subprocess
 
     plist = Path.home() / "Library" / "LaunchAgents" / f"{LAUNCH_AGENT}.plist"
@@ -114,11 +131,10 @@ def _launch_agent(install: bool) -> None:
         return
     from .config import CONFIG_DIR
 
-    project = Path(__file__).resolve().parents[2]
     plist.parent.mkdir(parents=True, exist_ok=True)
     plist.write_bytes(plistlib.dumps({
         "Label": LAUNCH_AGENT,
-        "ProgramArguments": [shutil.which("uv") or "uv", "--directory", str(project), "run", "amaran-mcp", "listen"],
+        "ProgramArguments": _listener_command(Path(__file__).resolve()),
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},
         "StandardOutPath": str(CONFIG_DIR / "listener.log"),

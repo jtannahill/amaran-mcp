@@ -73,47 +73,60 @@ design, and it speaks to amaran lights, not DMX.
 
 ### Set it up once
 
-You need a Mac, [uv](https://docs.astral.sh/uv/), and amaran Desktop with the
-light paired in it.
+You need a Mac, [uv](https://docs.astral.sh/uv/), Xcode's command line tools
+(`xcode-select --install`; music mode compiles its audio helper on first run),
+and amaran Desktop with the light paired in it.
 
-1. Quit amaran Desktop fully (it keeps running after its window closes, and
+1. Install the command (later, `uv tool upgrade amaran-mcp` updates it):
+
+   ```sh
+   uv tool install git+https://github.com/jtannahill/amaran-mcp
+   ```
+
+2. Quit amaran Desktop fully (it keeps running after its window closes, and
    holds the light), then import the light:
 
    ```sh
-   git clone https://github.com/jtannahill/amaran-mcp && cd amaran-mcp
-   uv run amaran-mcp import
-   uv run amaran-mcp status
+   amaran-mcp import
+   amaran-mcp status
    ```
 
-2. Register it with your MCP client. In Claude Code:
+3. Connect your assistant.
 
-   ```sh
-   claude mcp add -s user amaran -- \
-     uv --directory "$PWD" run amaran-mcp serve
-   ```
+   - **Claude Code**, as a plugin that updates with `/plugin update`:
 
-   In Cursor, GrokBot or another client, add the same command to its MCP
-   servers list. For Cursor, in `~/.cursor/mcp.json` (use the full path to
-   your clone):
+     ```
+     /plugin install amaran --marketplace jtannahill/amaran-mcp
+     ```
 
-   ```json
-   {
-     "mcpServers": {
-       "amaran": {
-         "command": "uv",
-         "args": ["--directory", "/path/to/amaran-mcp", "run", "amaran-mcp", "serve"]
+     On older versions, `/plugin marketplace add jtannahill/amaran-mcp` and
+     then `/plugin install amaran@amaran-mcp`. Or register the command
+     directly: `claude mcp add -s user amaran -- amaran-mcp serve`.
+   - **Cursor**, in `~/.cursor/mcp.json`, with the full path that
+     `which amaran-mcp` prints (apps opened from the Dock do not see your
+     shell's PATH):
+
+     ```json
+     {
+       "mcpServers": {
+         "amaran": { "command": "/Users/you/.local/bin/amaran-mcp", "args": ["serve"] }
        }
      }
-   }
-   ```
+     ```
 
-3. Ask for something: "warm white at 40 percent", "a slow violet", "start
+   - **GrokBot or any other MCP client**: the same command, `amaran-mcp serve`,
+     by its full path.
+
+4. Ask for something: "warm white at 40 percent", "a slow violet", "start
    music mode, deep".
+
+To work on the code instead, clone the repo and put `uv run` before each
+command.
 
 `import` writes `~/.config/amaran-mcp/light.json` (mode 600; it holds the mesh
 keys). The first Bluetooth use asks for permission for the app running the
 command. If the light was paired with the amaran phone app instead,
-`uv run amaran-mcp import --account you@example.com` fetches the keys from the
+`amaran-mcp import --account you@example.com` fetches the keys from the
 amaran account (the password is asked for and never stored; untested).
 
 ### Then ask for what you want
@@ -128,13 +141,13 @@ amaran account (the password is asked for and never stored; untested).
 | "Warmer, and down ten percent", said aloud while on camera | The same tools, by voice ([hands free](#hands-free-on-camera)) |
 | "Warm white at 40 percent" or "a slow violet" | Direct control, as with any light |
 
-The same works from the terminal (`uv run amaran-mcp music --mood deep`, and
+The same works from the terminal (`amaran-mcp music --mood deep`, and
 the other commands under [Tools](#tools)).
 
 ## Music mode
 
 ```sh
-uv run amaran-mcp music --mood ethereal     # or ask Claude: "start music mode"
+amaran-mcp music --mood ethereal     # or ask Claude: "start music mode"
 ```
 
 The light follows whatever this Mac plays, AirPlay from an iPhone included.
@@ -244,9 +257,9 @@ run); macOS asks once for permission to record system audio.
 ### Teaching it your music
 
 ```sh
-uv run amaran-mcp install-listener   # record listening sessions at login
-uv run amaran-mcp mark lift          # or breakdown, vocal, build, drop
-uv run amaran-mcp uninstall-listener
+amaran-mcp install-listener   # record listening sessions at login
+amaran-mcp mark lift          # or breakdown, vocal, build, drop
+amaran-mcp uninstall-listener
 ```
 
 The listener records while music plays (FLAC, a feature log and your marks, in
@@ -314,12 +327,12 @@ cues to the breaks.
 The same from the terminal:
 
 ```sh
-uv run amaran-mcp on | off | status
-uv run amaran-mcp brightness 40
-uv run amaran-mcp white 3200 60      # kelvin, brightness, optional tint
-uv run amaran-mcp color 30 100 50    # hue, saturation, brightness
-uv run amaran-mcp effect fire 70
-uv run amaran-mcp music --mood deep
+amaran-mcp on | off | status
+amaran-mcp brightness 40
+amaran-mcp white 3200 60      # kelvin, brightness, optional tint
+amaran-mcp color 30 100 50    # hue, saturation, brightness
+amaran-mcp effect fire 70
+amaran-mcp music --mood deep
 ```
 
 ## Next
