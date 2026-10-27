@@ -40,6 +40,12 @@ and the sections of a track, so the light drifts through the groove, pales
 when the kick drops out and blooms when a breakdown's chords lift, then opens
 out at the drop. It never flashes; colour can only change so fast.
 
+> [!IMPORTANT]
+> **Context matters, and so does the human imagination.** Trance music evokes
+> different vibes in everyone. Euphoric trance, however, is euphoric for many
+> who listen, myself included; therefore, **a bias towards a calming palette
+> was introduced.**
+
 Lighting a talking head well is fiddly in the other direction: white balance,
 tint and level, set by hand and lost by the next call. Here you describe the
 shot, or show Claude a photo of the set, and it sets the light; a scene brings
