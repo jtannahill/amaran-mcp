@@ -70,7 +70,8 @@ def test_decoder_holds_and_respects_musical_order():
     breakdown = {"groove": 0.1, "breakdown": 0.85, "build": 0.05, "climax": 0.0}
     seq = [d.step(breakdown) for _ in range(4)]
     assert seq[0] == "groove" and seq[-1] == "breakdown"          # after holding 2 s
-    assert d.step(climax) == "breakdown" and d.step(climax) == "climax"
+    steps = next(n for n in range(1, 30) if d.step(climax) == "climax")  # a section lasts a while
+    assert sections.MIN_STAY - 2 <= steps <= sections.MIN_STAY + sections.HOLD_SECONDS
     assert d.released                                             # breakdown -> climax is a release
 
 
