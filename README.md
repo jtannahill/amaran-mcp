@@ -1,7 +1,8 @@
 # amaran-mcp
 
-A Model Context Protocol server and CLI through which Claude drives an amaran
-light from a Mac, built for two uses of equal weight.
+A Model Context Protocol server and CLI through which an AI assistant drives an
+amaran light from a Mac, built for two uses of equal weight. It works with
+Claude Code, Cursor, GrokBot and any other MCP client that runs a local server.
 
 | Studio lighting from a prompt | Music mode |
 |---|---|
@@ -78,11 +79,26 @@ light paired in it.
    uv run amaran-mcp status
    ```
 
-2. Register it with Claude Code:
+2. Register it with your MCP client. In Claude Code:
 
    ```sh
    claude mcp add -s user amaran -- \
      uv --directory "$PWD" run amaran-mcp serve
+   ```
+
+   In Cursor, GrokBot or another client, add the same command to its MCP
+   servers list. For Cursor, in `~/.cursor/mcp.json` (use the full path to
+   your clone):
+
+   ```json
+   {
+     "mcpServers": {
+       "amaran": {
+         "command": "uv",
+         "args": ["--directory", "/path/to/amaran-mcp", "run", "amaran-mcp", "serve"]
+       }
+     }
+   }
    ```
 
 3. Ask for something: "warm white at 40 percent", "a slow violet", "start
@@ -206,13 +222,12 @@ degrees a second, so it never flashes or pulses on the beat.
 
 ### The same song twice
 
-The sections repeat; the colours repeat only when the Mac knows the song.
+The sections repeat; the colours do not, on purpose.
 
 | | Same on a second play? |
 |---|---|
-| Sections, blooms and when they land | Yes, within about a second. Music mode has no randomness and keeps time by the audio itself, but live capture lands on a slightly different grid each play, so a call that sits right at a threshold (the 2 s hold, the 4-bar kick test, a bloom) can occasionally flip |
-| The starting colour, with the song playing in the Music app | Yes. Each song starts on a palette stop chosen from a hash of its title and artist |
-| The colours, from any other source (AirPlay, a browser, SoundCloud, YouTube) | No. The groove's drift carries on from where the last track left it, so the same sections come in different colours |
+| Sections, blooms and when they land | Yes, within about a second. The section calls have no randomness and keep time by the audio itself, but live capture lands on a slightly different grid each play, so a call that sits right at a threshold (the 2 s hold, the 4-bar kick test, a bloom) can occasionally flip |
+| The colours | No. When the Music app names a new song, the light starts it on a palette stop picked at random from those not showing; from any other source (AirPlay, a browser, SoundCloud, YouTube) the groove's drift carries on from where the last track left it. Either way the same sections come in different colours |
 | The first 10 to 30 seconds | Not always. Tempo, key and level tracking carry over from the previous track |
 | The demo page | Always. It replays one fixed capture, so the light is identical on every play |
 
@@ -308,7 +323,6 @@ Neither of these is built yet.
 | Plan | What it would do |
 |---|---|
 | **The body as well as the music** | Layer health wearable data on top of music mode: heart rate from an Apple Watch, strain and recovery from WHOOP. The music still sets the sections and the colour; the body modulates them to some degree, for example a calmer, lower drift as your heart rate settles, or a fuller drop when you are moving |
-| **Same song, same light** | Treat a stretch of silence, or a new title from the Music app, as a new song: reset the listening and the drift, and with no title pick the starting colour from the key of the opening bars. The same song would then give the same light within about a second at every boundary |
 | **More lights** | Several amaran lights at once: a key, fill and back light for interviews, set together from one prompt |
 | **Keep the shot lit** | Watch the camera through a take and hold the face's exposure and skin tone steady, nudging brightness and colour temperature as daylight shifts or the speaker moves |
 

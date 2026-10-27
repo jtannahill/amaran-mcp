@@ -30,7 +30,7 @@ from ..desktop import DesktopError
 from ..light import LightBase, LightState
 from ..link import LinkError
 from .analysis import Analyzer, Features, merge_events
-from .applemusic import Track, anchor_for, now_playing
+from .applemusic import Track, fresh_anchor, now_playing
 from .capture import CaptureError, Source, open_source
 from .moods import MOODS, Mood
 from .recorder import RECORDINGS_DIR, Recorder
@@ -254,7 +254,7 @@ class _Run:
             log.warning("could not read the Music app: %s", err)
             return
         if track and (self.track is None or (track.name, track.artist) != (self.track.name, self.track.artist)):
-            self.renderer.jump_to_anchor(anchor_for(track, len(self.mood.anchors)))
+            self.renderer.jump_to_anchor(fresh_anchor(len(self.mood.anchors), self.renderer.anchor))
             self.track = track
             self.write_status()
         elif track is None and self.track is not None:

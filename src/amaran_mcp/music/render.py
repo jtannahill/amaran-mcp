@@ -134,6 +134,12 @@ class Renderer:
 
         self._out = Output(output.hue % 360, output.saturation, output.brightness)
 
+    @property
+    def anchor(self) -> int:
+        """The palette stop the drift is at or just past."""
+
+        return int(self._position)
+
     def jump_to_anchor(self, index: int) -> None:
         """Crossfade to a palette stop, e.g. when a new episode starts."""
 

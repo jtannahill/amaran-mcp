@@ -4,7 +4,9 @@ import logging
 import subprocess
 
 from amaran_mcp.music import applemusic
-from amaran_mcp.music.applemusic import Track, anchor_for, now_playing
+import random
+
+from amaran_mcp.music.applemusic import Track, fresh_anchor, now_playing
 
 
 def fake(stdout="", code=0, stderr=""):
@@ -31,9 +33,11 @@ def test_script_never_launches_music():
     assert 'application "Music" is running' in " ".join(seen[0])
 
 
-def test_anchor_is_stable():
-    t = Track("Adagio for Strings", "Tiesto", True)
-    assert anchor_for(t, 4) == anchor_for(t, 4) and 0 <= anchor_for(t, 4) < 4
+def test_a_new_track_starts_on_another_stop_and_varies():
+    rng = random.Random(1)
+    picks = [fresh_anchor(4, 2, rng) for _ in range(200)]
+    assert set(picks) == {0, 1, 3}
+    assert fresh_anchor(1, 0) == 0
 
 
 def test_automation_refusal_logged_once(caplog, monkeypatch):

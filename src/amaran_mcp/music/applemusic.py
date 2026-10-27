@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-import hashlib
 import logging
+import random
 import subprocess
 
 log = logging.getLogger(__name__)
@@ -59,8 +59,11 @@ def now_playing(run: Callable[[list[str]], subprocess.CompletedProcess] = _run) 
     return Track(name, artist, state == "playing")
 
 
-def anchor_for(track: Track, anchors: int) -> int:
-    """The palette stop a track starts on: the same song, the same colour."""
+def fresh_anchor(anchors: int, current: int, rng: random.Random | None = None) -> int:
+    """The palette stop a new track starts on: any but the one showing, so a song
+    played twice comes in different colours, and every new track visibly moves."""
 
-    digest = hashlib.sha256(f"{track.name}|{track.artist}".encode()).digest()
-    return int.from_bytes(digest[:4], "big") % anchors
+    if anchors < 2:
+        return 0
+    pick = (rng or random).randrange(anchors - 1)
+    return pick + 1 if pick >= current % anchors else pick
