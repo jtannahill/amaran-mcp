@@ -77,11 +77,15 @@ You need a Mac, [uv](https://docs.astral.sh/uv/), Xcode's command line tools
 (`xcode-select --install`; music mode compiles its audio helper on first run),
 and amaran Desktop with the light paired in it.
 
-1. Install the command (later, `uv tool upgrade amaran-mcp` updates it):
+1. Install the command from [PyPI](https://pypi.org/project/amaran-mcp/)
+   (later, `uv tool upgrade amaran-mcp` updates it):
 
    ```sh
-   uv tool install git+https://github.com/jtannahill/amaran-mcp
+   uv tool install amaran-mcp
    ```
+
+   For the newest code before a release, install from GitHub instead:
+   `uv tool install git+https://github.com/jtannahill/amaran-mcp`.
 
 2. Quit amaran Desktop fully (it keeps running after its window closes, and
    holds the light), then import the light:
