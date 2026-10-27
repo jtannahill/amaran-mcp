@@ -21,7 +21,6 @@ import os
 from pathlib import Path
 import signal
 import sys
-import time
 from typing import Any
 
 from ..backends import current_light
@@ -31,9 +30,9 @@ from ..light import LightBase, LightState
 from ..link import LinkError
 from .analysis import Analyzer, Features, merge_events
 from .applemusic import Track, fresh_anchor, now_playing
-from .capture import CaptureError, Source, open_source
+from .capture import CaptureError, MicAudio, Source, open_source
 from .moods import MOODS, Mood
-from .recorder import RECORDINGS_DIR, Recorder
+from .listener import Sessions
 from . import sections as section_model
 from .render import Output, Renderer
 
@@ -174,14 +173,9 @@ class _Run:
         self._pending: Features | None = None  # features since the last tick, events merged
         self.writer: _Writer | None = None
         self._posted: tuple | None = None
-        self.recorder: Recorder | None = None
-        self._marks_seen = 0
-        if config.record:
-            session = RECORDINGS_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
-            self.recorder = Recorder(session)
-            if config.log_features is None:
-                session.mkdir(parents=True, exist_ok=True)
-                config.log_features = session / "features.jsonl"
+        # Recording keeps what the Mac plays while music plays, never the room: no microphone.
+        self.sessions = (Sessions(first_marks=0) if config.record and not isinstance(source, MicAudio)
+                         else None)
         self._latest: Features | None = None  # for the status file
         self._log = open(config.log_features, "a") if config.log_features else None
 
@@ -200,8 +194,8 @@ class _Run:
             "message": self.message,
             "section": self._latest.section if self._latest else None,
             "chord": self._latest.harmony.chord if self._latest else None,
-            "recording": str(self.recorder.directory) if self.recorder and not self.recorder.stopped else None,
-            "recording_stopped": self.recorder.stopped if self.recorder else None,
+            "recording": self.sessions.recording if self.sessions else None,
+            "recording_stopped": self.sessions.stopped if self.sessions else None,
         })
 
     def note_error(self, message: str) -> None:
@@ -274,21 +268,6 @@ class _Run:
         elif track:
             self.track = track
 
-    def _take_marks(self) -> None:
-        """Moments flagged through Claude, placed at the time they were flagged."""
-
-        if not self.recorder or not MARKS_PATH.exists():
-            return
-        lines = MARKS_PATH.read_text().splitlines()
-        for line in lines[self._marks_seen :]:
-            try:
-                entry = json.loads(line)
-                ago = max(0.0, time.time() - float(entry["wall"]))
-                self.recorder.mark(entry["kind"], entry.get("note"), seconds_ago=ago)
-            except (ValueError, KeyError, RuntimeError) as err:
-                log.warning("could not place a mark: %s", err)
-        self._marks_seen = len(lines)
-
     def _post(self, command: tuple) -> None:
         self._posted = command
         self.writer.post(command)
@@ -341,12 +320,13 @@ class _Run:
                 if self.now >= self._next["music"]:
                     self._next["music"] = self.now + self.config.music_poll_seconds
                     await self.poll_music()
-                if self.recorder:
-                    self.recorder.write(block, self.source.rate)
+                if self.sessions and self.sessions.feed(block, self.source.rate, f):
+                    self.write_status()
                 if self.now >= self._next["control"]:
                     self._next["control"] = self.now + CONTROL_EVERY
                     self.renderer.brightness_offset = _read_offset()
-                    self._take_marks()
+                    if self.sessions:
+                        self.sessions.take_marks()
 
                 # Exact zeros while Music says it is playing: capture is refused.
                 if f.digital_zero:
@@ -391,9 +371,8 @@ class _Run:
             await self.source.close()
             if self._log:
                 self._log.close()
-            if self.recorder:
-                self._take_marks()
-                self.recorder.close()
+            if self.sessions:
+                self.sessions.close()
         return 0
 
 

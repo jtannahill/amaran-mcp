@@ -12,9 +12,9 @@ def control(tmp_path, monkeypatch):
     monkeypatch.setenv("AMARAN_MCP_HOME", str(tmp_path))
     from amaran_mcp import config
     importlib.reload(config)
-    from amaran_mcp.music import control as module, runner
-    importlib.reload(runner)
-    importlib.reload(module)
+    from amaran_mcp.music import control as module, listener, recorder, runner
+    for stale in (recorder, listener, runner, module):  # every path under the new home
+        importlib.reload(stale)
     return module
 
 

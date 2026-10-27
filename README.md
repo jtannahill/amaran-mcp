@@ -273,6 +273,12 @@ The listener records while music plays (FLAC, a feature log and your marks, in
 actually listen to. It never touches the light, needs ffmpeg, stops at 30 GB,
 and nothing leaves the Mac. Delete the folder to remove the recordings.
 
+Music mode records the same way when the listener is not running. Either one
+keeps only the music: a session starts when music is recognised (with the ten
+seconds before it) and ends two minutes after it stops, so a call or a video
+afterwards is not kept, and the microphone is never recorded. The folder is
+readable by your user only.
+
 ## Studio lighting from a prompt
 
 Interviews and talking heads are mostly white light: the right colour

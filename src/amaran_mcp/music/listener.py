@@ -25,12 +25,14 @@ import numpy as np
 from ..config import CONFIG_DIR, _write_private, is_ours
 from .analysis import Analyzer
 from .capture import CaptureError, Source, SystemAudio
-from .recorder import RECORDINGS_DIR, Recorder
+from . import recorder as recordings  # its RECORDINGS_DIR read at use, so tests can move it
+from .recorder import Recorder
 
 log = logging.getLogger(__name__)
 
 STATUS_PATH = CONFIG_DIR / "listener.json"
 PREROLL_SECONDS = 10.0  # music is recognised a few seconds in; keep what came just before
+REASK_SECONDS = 10.0  # how often a refused session asks again whether it may open
 
 
 def status() -> dict | None:
@@ -51,12 +53,17 @@ def status() -> dict | None:
 
 
 class _Session:
-    def __init__(self) -> None:
-        self.directory = RECORDINGS_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
+    def __init__(self, marks_seen: int | None = None) -> None:
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.directory = recordings.RECORDINGS_DIR / stamp
+        for n in range(2, 100):  # a session that closes and reopens within a second
+            if not self.directory.exists():
+                break
+            self.directory = recordings.RECORDINGS_DIR / f"{stamp}-{n}"
         self.recorder = Recorder(self.directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.recorder._make_directory()
         self.features = open(self.directory / "features.jsonl", "a")
-        self.marks_seen = _marks_count()
+        self.marks_seen = _marks_count() if marks_seen is None else marks_seen
         self._second = 0.0
 
     def write(self, block: np.ndarray, rate: int, features) -> None:
@@ -93,6 +100,79 @@ def _marks_count() -> int:
     return len(MARKS_PATH.read_text().splitlines()) if MARKS_PATH.exists() else 0
 
 
+class Sessions:
+    """Record while music plays: a session opens when music is recognised (keeping the
+    seconds just before it) and closes after `quiet_close_seconds` without music, so
+    calls, videos and silence around the music are not kept. The listener and music
+    mode both record through this, under one rule."""
+
+    def __init__(self, quiet_close_seconds: float = 120.0, may_open=lambda: True,
+                 first_marks: int | None = None) -> None:
+        self.quiet_close_seconds = quiet_close_seconds
+        self.session: _Session | None = None
+        self._may_open = may_open
+        self._first_marks = first_marks  # music mode: marks since it started belong to its first session
+        self._quiet = 0.0
+        self._ask_in = 0.0  # seconds until may_open is asked again after a no
+        self._preroll: deque = deque()
+
+    @property
+    def recording(self) -> str | None:
+        session = self.session
+        return str(session.directory) if session and not session.recorder.stopped else None
+
+    @property
+    def stopped(self) -> str | None:
+        return self.session.recorder.stopped if self.session else None
+
+    def feed(self, block: np.ndarray, rate: int, features) -> bool:
+        """Take one block; True when a session opened or closed."""
+
+        dt = len(block) / rate
+        changed = False
+        self._ask_in -= dt
+        if features.is_music:
+            self._quiet = 0.0
+            if self.session is None and self._ask_in <= 0 and not self._may_open():
+                self._ask_in = REASK_SECONDS
+            elif self.session is None and self._ask_in <= 0:
+                self.session = _Session(self._first_marks)
+                self._first_marks = None
+                for old, old_features in self._preroll:
+                    self.session.write(old, rate, old_features)
+                self._preroll.clear()
+                changed = True
+        elif self.session is not None:
+            self._quiet += dt
+            if self._quiet >= self.quiet_close_seconds:
+                self.close()
+                changed = True
+        if self.session is not None:
+            self.session.write(block, rate, features)
+        else:
+            self._preroll.append((block, features))
+            while len(self._preroll) * dt > PREROLL_SECONDS:
+                self._preroll.popleft()
+        return changed
+
+    def take_marks(self) -> None:
+        if self.session is not None:
+            self.session.take_marks()
+
+    def close(self) -> None:
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+
+
+def _music_mode_records() -> bool:
+    """Music mode recording on its own (the listener was down when it started)."""
+
+    from . import control
+
+    return (control.status() or {}).get("recorded_by") == "music mode"
+
+
 async def listen(source: Source | None = None, quiet_close_seconds: float = 120.0) -> int:
     try:
         source = source or SystemAudio()
@@ -108,18 +188,16 @@ async def listen(source: Source | None = None, quiet_close_seconds: float = 120.
         except (NotImplementedError, RuntimeError):
             pass
     analyzer: Analyzer | None = None
-    preroll: deque = deque()
-    session: _Session | None = None
-    quiet = 0.0
+    sessions = Sessions(quiet_close_seconds, may_open=lambda: not _music_mode_records())
     now = 0.0
     next_status = 0.0
 
     def write_status() -> None:
         _write_private(STATUS_PATH, {
             "pid": os.getpid(),
-            "recording": str(session.directory) if session and not session.recorder.stopped else None,
-            "recording_stopped": session.recorder.stopped if session else None,
-            "state": "music" if session else "quiet",
+            "recording": sessions.recording,
+            "recording_stopped": sessions.stopped,
+            "state": "music" if sessions.session else "quiet",
         })
 
     try:
@@ -129,39 +207,17 @@ async def listen(source: Source | None = None, quiet_close_seconds: float = 120.
             rate = source.rate
             if analyzer is None:
                 analyzer = Analyzer(rate)
-            dt = len(block) / rate
-            now += dt
+            now += len(block) / rate
             classes = source.latest_classes() if hasattr(source, "latest_classes") else None
             f = analyzer.feed(block, classes)
-            if f.is_music:
-                quiet = 0.0
-                if session is None:
-                    session = _Session()
-                    for old, old_features in preroll:
-                        session.write(old, rate, old_features)
-                    preroll.clear()
-                    write_status()
-            elif session is not None:
-                quiet += dt
-                if quiet >= quiet_close_seconds:
-                    session.close()
-                    session = None
-                    write_status()
-            if session is not None:
-                session.write(block, rate, f)
-            else:
-                preroll.append((block, f))
-                while len(preroll) * dt > PREROLL_SECONDS:
-                    preroll.popleft()
+            if sessions.feed(block, rate, f):
+                write_status()
             if now >= next_status:
                 next_status = now + 5.0
-                if session:
-                    session.take_marks()
+                sessions.take_marks()
                 write_status()
     finally:
-        if session is not None:
-            session.close()
+        sessions.close()
         await source.close()
-        session = None
         write_status()
     return 0

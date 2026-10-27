@@ -144,9 +144,9 @@ def test_the_writer_survives_an_unexpected_error(config):
 
 @pytest.fixture
 def control(config):
-    from amaran_mcp.music import control as module, runner
-    importlib.reload(runner)
-    importlib.reload(module)
+    from amaran_mcp.music import control as module, listener, recorder, runner
+    for stale in (recorder, listener, runner, module):
+        importlib.reload(stale)
     return module
 
 
