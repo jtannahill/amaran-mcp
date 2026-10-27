@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play a breakdown</title>
+<meta name="description" content="Press play on a Creative Commons trance track and watch an amaran light follow it, second by second, the way amaran-mcp's music mode does.">
+<link rel="preload" href="fonts/Unbounded.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  /* Self-hosted, SIL Open Font License (fonts/OFL-*.txt). */
+  @font-face { font-family: "Unbounded"; font-weight: 300 400; font-display: swap; src: url(fonts/Unbounded.woff2) format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 400 600; font-display: swap; src: url(fonts/HankenGrotesk.woff2) format("woff2"); }
+  /* Dark only, on purpose: the scene is a desk at night with one light on, and the page is the wall behind it. */
+  :root {
+    --wall: #0b0d14;
+    --ink: #eef0f6;
+    --ink-soft: #c3c8d6;
+    --tube: #3a4a8c;
+    --lane: rgba(238, 240, 246, 0.16);
+    --lane-strong: rgba(238, 240, 246, 0.62);
+    --focus: #f7f8fc;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--wall); }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background: var(--wall);
+    color: var(--ink);
+    font: 400 17px/1.55 "Hanken Grotesk", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--ink); color: var(--wall); }
+  a { color: var(--ink); text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+  .room {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.6fr);
+    gap: clamp(32px, 6vw, 96px);
+    align-items: center;
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: clamp(40px, 7vh, 88px) clamp(16px, 4vw, 48px) 40px;
+    min-height: min(760px, 82svh);
+  }
+  .stand { display: flex; justify-content: center; }
+  .tube {
+    width: 34px;
+    height: min(520px, 62svh);
+    border-radius: 17px;
+    background: var(--tube);
+  }
+  h1 {
+    font: 300 clamp(40px, 5.6vw, 76px)/1.04 "Unbounded", "Hanken Grotesk", system-ui, sans-serif;
+    letter-spacing: -0.03em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  .lede { max-width: 34em; color: var(--ink-soft); margin: 0 0 28px; }
+  .now {
+    font: 300 clamp(24px, 2.6vw, 32px)/1.2 "Unbounded", "Hanken Grotesk", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+    min-height: 1.2em;
+    text-wrap: balance;
+  }
+  .detail { color: var(--ink-soft); margin: 0 0 28px; min-height: 3.1em; max-width: 34em; font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+  .play {
+    font: 600 17px/1 "Hanken Grotesk", sans-serif;
+    color: var(--wall);
+    background: var(--ink);
+    border: 0;
+    border-radius: 999px;
+    padding: 15px 26px;
+    cursor: pointer;
+    min-width: 112px;
+    transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
+  }
+  .play:hover { background: #f7f8fc; }
+  .play:active { transform: scale(0.97); }
+  .play:disabled { opacity: 0.5; cursor: default; transform: none; }
+  .moods { display: flex; gap: 6px; }
+  .moods button {
+    font: 500 16px/1 "Hanken Grotesk", sans-serif;
+    color: var(--ink-soft);
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    padding: 11px 14px;
+    min-height: 44px;
+    cursor: pointer;
+    transition: color 150ms var(--ease-out), background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
+  }
+  .moods button:hover { color: var(--ink); }
+  .moods button:active, .tracks button:active { transform: scale(0.97); }
+  .moods button[aria-pressed="true"] { color: var(--wall); background: var(--ink-soft); }
+  .sound-note { color: var(--ink-soft); font-size: 15px; margin: 14px 0 0; min-height: 1.5em; }
+
+  .track {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 48px) 32px;
+  }
+  .tracks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 22px; }
+  .tracks button {
+    font: 500 16px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft); background: transparent;
+    border: 0; border-radius: 999px; padding: 11px 16px; min-height: 44px; cursor: pointer;
+    transition: color 150ms var(--ease-out), background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
+  }
+  .tracks button:hover { color: var(--ink); }
+  .tracks button[aria-pressed="true"] { color: var(--wall); background: var(--ink-soft); }
+  .track-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; margin: 0 0 12px; }
+  .track-head h2 { font: 500 17px/1.3 "Hanken Grotesk", sans-serif; margin: 0; }
+  .track-head span { color: var(--ink-soft); font-size: 15px; font-variant-numeric: tabular-nums; }
+  .timeline { position: relative; cursor: pointer; touch-action: none; }
+  .band { display: block; width: 100%; height: 64px; border-radius: 8px; }
+  .lane { margin-top: 14px; }
+  .lane-name { display: block; font-size: 14px; color: var(--ink-soft); pointer-events: none; margin: 0 0 6px; }
+  .lane-bars { position: relative; height: 30px; }
+  .lane-bars i { position: absolute; top: 0; height: 8px; border-radius: 4px; background: var(--lane); }
+  .lane-bars i.loud { background: var(--lane-strong); }
+  .lane-bars b { visibility: hidden; }
+  .lane-bars b {
+    position: absolute; top: 12px; font: 500 13px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft);
+    white-space: nowrap; transform: translateX(0);
+  }
+  .playhead {
+    position: absolute; top: -6px; bottom: -4px; width: 2px; margin-left: -1px;
+    background: var(--ink); border-radius: 1px; pointer-events: none; left: 0;
+  }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 18px 0 0; color: var(--ink-soft); font-size: 15px; }
+
+  .player { margin: 28px 0 0; }
+  .player iframe { width: 100%; height: 120px; border: 0; border-radius: 8px; display: block; }
+    .honest { max-width: 44em; color: var(--ink-soft); margin: 28px 0 0; }
+  footer { max-width: 1160px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 48px) 56px; color: var(--ink-soft); font-size: 15px; }
+
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .room { grid-template-columns: 16px minmax(0, 1fr); gap: 20px; min-height: 0; padding-top: 32px; align-items: stretch; }
+    .stand { justify-content: stretch; }
+    .tube { width: 16px; height: auto; min-height: 100%; border-radius: 8px; }
+    .band { height: 48px; }
+    .lane-bars b { font-size: 12px; }
+    .tracks button { padding: 11px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .playhead { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <section class="room" aria-label="The light">
+    <div class="stand"><div class="tube" id="tube" role="img" aria-label="The light tube, showing music mode's colour"></div></div>
+    <div>
+      <h1>Play a breakdown</h1>
+      <p class="lede">This is the colour an amaran light takes under
+        <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp</a>'s music mode. Every second
+        was computed by the real analysis and renderer, then saved. The page's background stands in for the
+        wall behind the light.</p>
+      <p class="now" id="now" aria-live="polite">Press play.</p>
+      <p class="detail" id="detail">The light waits in the dark.</p>
+      <div class="controls">
+        <button class="play" id="play" type="button" disabled><span id="playlabel">Play</span></button>
+        <div class="moods" role="group" aria-label="Mood">
+          <button type="button" data-mood="ethereal" aria-pressed="true">Ethereal</button>
+          <button type="button" data-mood="deep" aria-pressed="false">Deep</button>
+          <button type="button" data-mood="dawn" aria-pressed="false">Dawn</button>
+        </div>
+      </div>
+      <p class="sound-note" id="soundnote"></p>
+    </div>
+  </section>
+
+  <section class="track" aria-label="The whole track">
+    <div class="tracks" role="group" aria-label="Track">
+      <button type="button" data-track="missyou" aria-pressed="true">A State of Trance</button>
+      <button type="button" data-track="visionary" aria-pressed="false">A breakdown that blooms</button>
+      <button type="button" data-track="atlantis" aria-pressed="false">A build and a drop</button>
+    </div>
+    <div class="track-head">
+      <h2 id="trackname">Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You</h2>
+      <span id="clock">0:00 / 0:00</span>
+    </div>
+    <div class="timeline" id="timeline" role="slider" tabindex="0" aria-label="Position in the track"
+         aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
+      <canvas class="band" id="band" aria-hidden="true"></canvas>
+      <div class="lane"><span class="lane-name">Music mode heard</span><div class="lane-bars" id="heard"></div></div>
+      <div class="lane"><span class="lane-name" id="secondname">Experts marked</span><div class="lane-bars" id="experts"></div></div>
+      <div class="playhead" id="playhead"></div>
+    </div>
+    <p class="legend">Click or drag along the track to jump. Arrow keys move ten seconds.</p>
+
+    <div class="player" id="player"></div>
+
+    <p class="honest" id="honest"></p>
+    <p class="honest">The two Creative Commons tracks were picked because music mode gets them mostly right.
+      Across the 402 tracks the model learned from, scored on tracks it had not seen, it is far less sure, and it
+      finds about one breakdown start in ten. Every number, and what is still wrong, is in
+      <a href="https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md">the research notes</a>.
+      The audio streams from YouTube and SoundCloud; only the colours, the section calls and the marks are stored here.</p>
+  </section>
+</main>
+<footer>
+  <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp on GitHub</a>. Tracks: Craig Connelly and Nicholas
+  Gunn feat. Alina Renae, Miss You, from Craig Connelly's SoundCloud (colours from the A State of Trance 1180 cut); Rameses B, Visionary, and Bionick, Atlantis
+  (ft. Digital:twist), from the <a href="https://osf.io/eydxk/">SSME dataset</a> of Creative Commons tracks with expert
+  section labels.
+  Not affiliated with Aputure or amaran.
+</footer>
+
+<script src="https://w.soundcloud.com/player/api.js"></script>
+<script>
+(() => {
+  const TRACKS = {
+    missyou: {
+      listen: 1886402916, file: "missyou.json", second: "You marked (typed during the song, a few seconds late)",
+      name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You",
+      honest: "The light and the timeline here come from the 4:14 cut in A State of Trance episode 1180, recorded on the owner's Mac while they played it and called out what they heard. The player below is the full 5:05 version on SoundCloud, so the two are not in sync: press Play here to watch the light on its own, and use the player to listen. Music mode bloomed at 1:22 and 2:03, close to two of the lifts the owner called. It heard the first minute as groove where they heard a build and a first climax, and its drop came at 3:14, on their top of the climax but after the climax they called from 2:38.",
+    },
+    visionary: {
+      soundcloud: 40261568, second: "Experts marked", file: "visionary.json", name: "Rameses B, Visionary",
+      honest: "Music mode calls the build on the second the experts mark it, the drop three seconds late, and the long breakdown four seconds late; it blooms three times inside that breakdown as the chords lift. It also hears five short breakdowns the experts did not mark, where the kick only drops out for a few bars.",
+    },
+    atlantis: {
+      soundcloud: 54846659, second: "Experts marked", file: "atlantis.json", name: "Bionick, Atlantis (ft. Digital:twist)",
+      honest: "Music mode calls the build three seconds late and the breakdown a second late. It calls a drop ten seconds early at 1:18, goes back to the build, and then catches the real drop at 1:29, one second late. No bloom here: the breakdown's chords never lift from minor to major.",
+    },
+  };
+  let track = "missyou";
+  const WORDS = {
+    silence: ["Silence.", "The light waits in the dark."],
+    intro: ["Intro.", "Held back, in the lower third of the range."],
+    groove: ["Groove.", "Drifting slowly through the mood, breathing with the energy."],
+    breakdown: ["Breakdown.", "The kick is out: pale first, then the chords set the colour."],
+    build: ["Build.", "The drift stops, the colour deepens, brightness holds."],
+    climax: ["Drop.", "Open to full."],
+    bloom: ["Lift.", "The chords rise from minor to major, and the light blooms."],
+  };
+  const NAMES = { intro: "Intro", groove: "Groove", breakdown: "Breakdown", build: "Build", climax: "Drop", silence: "" };
+  const $ = (id) => document.getElementById(id);
+  const tube = $("tube"), now = $("now"), detail = $("detail"), band = $("band"), playhead = $("playhead");
+  const timeline = $("timeline"), clock = $("clock"), playBtn = $("play"), playLabel = $("playlabel");
+  const root = document.documentElement;
+  let data = null, mood = "ethereal", position = 0, playing = false, player = null;
+  let anchorPos = 0, anchorAt = 0, lastSection = null, silent = false;
+
+  const SAY = { C: "C", "C#": "C sharp", D: "D", "D#": "E flat", E: "E", F: "F", "F#": "F sharp", G: "G",
+                "G#": "A flat", A: "A", "A#": "B flat", B: "B" };
+  const chordName = (c) => c.endsWith("m") ? `${SAY[c.slice(0, -1)]} minor` : `${SAY[c]} major`;
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  function hsv(h, s, v) {
+    const f = (n) => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+    return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
+  }
+  // The light at its colour and level; the wall gets a dim, flat spill of it.
+  const lightColour = ([h, s, b]) => hsv(h, s / 100, 0.18 + 0.82 * b / 100);
+  const wallColour = ([h, s, b]) => hsv(h, (s / 100) * 0.85, 0.05 + 0.2 * b / 100);
+
+  function frameAt(t) {
+    const i = Math.max(0, Math.min(data.frames.length - 1, Math.round(t * 10) - 1));
+    return i;
+  }
+
+  function paintBand() {
+    const w = band.clientWidth, h = band.clientHeight, dpr = window.devicePixelRatio || 1;
+    band.width = Math.round(w * dpr); band.height = Math.round(h * dpr);
+    const ctx = band.getContext("2d");
+    const cols = data.colours[mood], n = cols.length;
+    const step = Math.max(1, Math.floor(n / (w * dpr)));
+    for (let x = 0; x < band.width; x++) {
+      const i = Math.min(n - 1, Math.floor((x / band.width) * n));
+      ctx.fillStyle = lightColour(cols[i]);
+      ctx.fillRect(x, 0, 1, band.height);
+    }
+  }
+
+  function bars(el, spans) {
+    el.innerHTML = "";
+    const d = data.duration;
+    for (const [a, b, label] of spans) {
+      const i = document.createElement("i");
+      i.className = "loud";
+      i.style.left = `${(a / d) * 100}%`; i.style.width = `${Math.max(0.5, ((b - a) / d) * 100)}%`;
+      el.appendChild(i);
+      const t = document.createElement("b");
+      t.textContent = label; t.style.left = `${(a / d) * 100}%`;
+      el.appendChild(t);
+    }
+    fitLabels(el);
+  }
+  // Longest spans keep their names first; a name that would touch another is hidden.
+  function fitLabels(el) {
+    const labels = [...el.querySelectorAll("b")];
+    labels.forEach((t) => { t.style.visibility = "visible"; t.dataset.span = t.previousSibling.offsetWidth; });
+    const kept = [];
+    labels.sort((p, q) => q.dataset.span - p.dataset.span).forEach((t) => {
+      const l = t.offsetLeft, r = l + t.offsetWidth;
+      const clash = r > el.clientWidth + 2 || kept.some(([kl, kr]) => l < kr + 10 && r > kl - 10);
+      if (clash) t.style.visibility = "hidden"; else kept.push([l, r]);
+    });
+  }
+
+  function buildLanes() {
+    const heard = [];
+    let start = 0, cur = data.frames[0][1];
+    data.frames.forEach((f, i) => {
+      if (f[1] !== cur) { heard.push([start, f[0], NAMES[cur]]); start = f[0]; cur = f[1]; }
+      if (i === data.frames.length - 1) heard.push([start, f[0], NAMES[cur]]);
+    });
+    bars($("heard"), heard.filter((s) => s[2] === "Breakdown" || s[2] === "Build" || s[2] === "Drop"));
+    const ex = [];
+    if (data.marks) {
+      for (const [t, label] of data.marks) ex.push([t, t + 0.6, label]);
+    } else {
+      for (const [a, b] of data.experts.build) ex.push([a, b, "Build"]);
+      for (const [a, b] of data.experts.break) ex.push([a, b, "Breakdown"]);
+      for (const t of data.experts.drop) ex.push([t, t + 1.5, "Drop"]);
+    }
+    bars($("experts"), ex.sort((p, q) => p[0] - q[0]));
+  }
+
+  function show(t) {
+    position = Math.max(0, Math.min(data.duration, t));
+    const i = frameAt(position), f = data.frames[i], c = data.colours[mood][i];
+    tube.style.background = lightColour(c);
+    root.style.setProperty("--wall", wallColour(c));
+    playhead.style.left = `${(position / data.duration) * 100}%`;
+    clock.textContent = `${fmt(position)} / ${fmt(data.duration)}`;
+    timeline.setAttribute("aria-valuenow", Math.round(position));
+    timeline.setAttribute("aria-valuetext", fmt(position));
+    // A bloom is one moment; keep its words up for the bloom's hold.
+    const recentBloom = data.frames.slice(Math.max(0, i - 40), i + 1).some((g) => g[5]);
+    const key = f[1] === "breakdown" && recentBloom ? "bloom" : f[1];
+    if (key !== lastSection) {
+      lastSection = key;
+      now.textContent = WORDS[key][0];
+    }
+    const extras = [WORDS[key][1]];
+    if (f[2]) extras.push(`Chord: ${chordName(f[2])}.`);
+    if (f[3] >= 0.3) extras.push("A voice is singing.");
+    detail.textContent = extras.join(" ");
+  }
+
+  function tick() {
+    if (playing) {
+      const t = anchorPos + (performance.now() - anchorAt) / 1000;
+      show(t);
+      if (t >= data.duration) setPlaying(false);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    anchorPos = position; anchorAt = performance.now();
+    playLabel.textContent = on ? "Pause" : "Play";
+  }
+
+  function seek(t) {
+    show(t);
+    anchorPos = position; anchorAt = performance.now();
+    if (player && player.ready) player.seek(position);
+  }
+
+  playBtn.addEventListener("click", () => {
+    if (!data) return;
+    if (player && player.ready) {
+      playing ? player.pause() : player.play();
+    } else {
+      setPlaying(!playing);
+    }
+  });
+
+  document.querySelectorAll(".moods button").forEach((b) => b.addEventListener("click", () => {
+    mood = b.dataset.mood;
+    document.querySelectorAll(".moods button").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+    paintBand(); show(position);
+  }));
+
+  const fromPointer = (e) => {
+    const r = band.getBoundingClientRect();
+    return ((e.clientX - r.left) / r.width) * data.duration;
+  };
+  let dragging = false;
+  timeline.addEventListener("pointerdown", (e) => { if (!data) return; dragging = true; timeline.setPointerCapture(e.pointerId); seek(fromPointer(e)); });
+  timeline.addEventListener("pointermove", (e) => { if (dragging) seek(fromPointer(e)); });
+  timeline.addEventListener("pointerup", () => { dragging = false; });
+  timeline.addEventListener("keydown", (e) => {
+    if (!data) return;
+    const moves = { ArrowRight: 10, ArrowLeft: -10, PageUp: 60, PageDown: -60 };
+    if (e.key in moves) { e.preventDefault(); seek(position + moves[e.key]); }
+    if (e.key === "Home") { e.preventDefault(); seek(0); }
+    if (e.key === "End") { e.preventDefault(); seek(data.duration); }
+  });
+
+  // The SoundCloud player drives the light's clock when the colours come from that exact upload.
+  const note = $("soundnote");
+  function soundcloudPlayer(id) {
+    const p = { ready: false };
+    if (!window.SC) { note.textContent = "SoundCloud did not load, so this plays without sound."; return p; }
+    const frame = document.createElement("iframe");
+    frame.title = "The track on SoundCloud";
+    frame.allow = "autoplay; encrypted-media";
+    frame.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://api.soundcloud.com/tracks/${id}`)}&color=%23eef0f6&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+    $("player").className = "player"; $("player").replaceChildren(frame);
+    const w = SC.Widget(frame);
+    const failed = setTimeout(() => { if (!p.ready) note.textContent = "The SoundCloud player did not answer, so this plays without sound."; }, 8000);
+    w.bind(SC.Widget.Events.READY, () => {
+      clearTimeout(failed); p.ready = true;
+      note.textContent = "Sound comes from SoundCloud. Turn it up.";
+      w.bind(SC.Widget.Events.PLAY, () => setPlaying(true));
+      w.bind(SC.Widget.Events.PAUSE, () => setPlaying(false));
+      w.bind(SC.Widget.Events.FINISH, () => setPlaying(false));
+      w.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
+        if (!dragging) { anchorPos = e.currentPosition / 1000; anchorAt = performance.now(); }
+      });
+    });
+    Object.assign(p, { play: () => w.play(), pause: () => w.pause(), seek: (s) => w.seekTo(s * 1000) });
+    return p;
+  }
+  // A track whose colours come from another version: the player is there to listen, not to drive the light.
+  function listenOnly(id) {
+    const frame = document.createElement("iframe");
+    frame.title = "The full track on SoundCloud";
+    frame.allow = "autoplay; encrypted-media";
+    frame.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(`https://api.soundcloud.com/tracks/${id}`)}&color=%23eef0f6&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&visual=false`;
+    $("player").className = "player"; $("player").replaceChildren(frame);
+    note.textContent = "This track's light plays on its own; the SoundCloud player below is the full version, to listen.";
+    return null;
+  }
+  const cache = {};
+  function load(name) {
+    track = name;
+    const t = TRACKS[name];
+    $("trackname").textContent = t.name;
+    $("honest").textContent = t.honest;
+    $("secondname").textContent = t.second;
+    document.querySelectorAll(".tracks button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.track === name)));
+    if (playing) { player && player.ready ? player.pause() : null; setPlaying(false); }
+    playBtn.disabled = true;
+    if (!cache[name]) { now.textContent = "Loading the light."; detail.textContent = "The track's colours are on their way."; }
+    const got = cache[name] ? Promise.resolve(cache[name]) : fetch(t.file).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    return got.then((d) => {
+      playBtn.disabled = false;
+      cache[name] = d; data = d;
+      timeline.setAttribute("aria-valuemax", Math.round(d.duration));
+      paintBand(); buildLanes(); show(0);
+      lastSection = null; now.textContent = "Press play."; detail.textContent = "The light waits in the dark.";
+      note.textContent = "";
+      player = t.soundcloud ? soundcloudPlayer(t.soundcloud) : listenOnly(t.listen);
+    }).catch(() => { now.textContent = "The track's colours did not load."; detail.textContent = "Reload the page to try again."; });
+  }
+  document.querySelectorAll(".tracks button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.track !== track) load(b.dataset.track); }));
+  // A link like #visionary/t=165 opens a track at a moment.
+  const deep = location.hash.match(/^#(missyou|visionary|atlantis)?\/?(?:t=(\d+))?$/);
+  if (deep && deep[1]) track = deep[1];
+  load(track).then(() => {
+    if (deep && deep[2]) { show(Number(deep[2])); anchorPos = position; }
+    window.addEventListener("resize", () => { paintBand(); fitLabels($("heard")); fitLabels($("experts")); });
+    requestAnimationFrame(tick);
+  });
+})();
+</script>
+</body>
+</html>
