@@ -136,3 +136,23 @@ def test_spectrogram_network_numpy_matches_torch():
         theirs = torch.softmax(net(torch.from_numpy(train_cnn.prepare(windows, -5.0, 2.0))), dim=1).numpy()
     assert np.allclose(ours, theirs, atol=1e-5)
     assert model.input == "mel"
+
+
+def test_ensemble_blends_its_parts():
+    import train_sections
+    from sklearn.ensemble import HistGradientBoostingClassifier
+    import torch
+    import train_cnn
+    rng = np.random.default_rng(2)
+    X = rng.normal(size=(200, sections.WINDOW_SIZE))
+    classes = ["breakdown", "build", "climax", "groove"]
+    y = np.array(classes)[rng.integers(0, 4, 200)]
+    trees = train_sections.export_trees(HistGradientBoostingClassifier(max_iter=10).fit(X, y))
+    torch.manual_seed(0)
+    cnn = train_cnn.export_cnn(train_cnn.SectionNet(classes).eval(), -5.0, 2.0)
+    model = sections.Model(sections.ensemble_weights(trees, cnn, trees_weight=0.5))
+    assert model.input == "both"
+    features, mel = X[0], rng.normal(size=(sections.MEL_FRAMES, 64)) - 5
+    got = model.proba((features, mel))
+    a, b = sections.Model(trees).proba(features), sections.Model(cnn).proba(mel)
+    assert all(abs(got[c] - (0.5 * a[c] + 0.5 * b[c])) < 1e-9 for c in classes)

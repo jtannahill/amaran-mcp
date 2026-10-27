@@ -131,11 +131,17 @@ def main() -> None:
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--trees-results", type=Path, help="cv_results.json from train_sections.py")
     parser.add_argument("--save-heldout", type=Path, help="write each track's held-out probabilities here (for ensembles)")
+    parser.add_argument("--final", type=Path, help="skip cross-validation: train on every track and write the weights here")
     args = parser.parse_args()
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     tracks = load(args.mel.expanduser())
     classes = sorted({s for t in tracks for s in t["y"]})
     print(f"{len(tracks)} tracks, classes {classes}, device {device}")
+    if args.final:
+        net, level_mean, level_scale = train(tracks, classes, args.epochs, 99, device)
+        np.savez(args.final, **export_cnn(net, level_mean, level_scale))
+        print(f"wrote {args.final}")
+        return
     rng = np.random.default_rng(0)
     order = rng.permutation(len(tracks))
     folds = [order[k :: args.folds] for k in range(args.folds)]

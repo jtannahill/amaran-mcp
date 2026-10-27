@@ -104,6 +104,16 @@ def window(seconds: np.ndarray, i: int) -> np.ndarray:
     return np.concatenate([rows[-1], rows.mean(axis=0), rows[-1] - rows[0], rows.std(axis=0), rows.max(axis=0)])
 
 
+def ensemble_weights(trees: dict, cnn: dict, trees_weight: float) -> dict[str, np.ndarray]:
+    """One weights file holding both models: p = w * trees + (1 - w) * cnn."""
+
+    out = {"kind": np.array("ensemble"), "trees_weight": np.array(trees_weight),
+           "classes": np.array(sorted(str(c) for c in trees["classes"]))}
+    out.update({f"trees__{k}": v for k, v in trees.items()})
+    out.update({f"cnn__{k}": v for k, v in cnn.items()})
+    return out
+
+
 class Model:
     """The trained section model, run in numpy (trained by tools/train_sections.py).
 
@@ -114,7 +124,13 @@ class Model:
     def __init__(self, weights: dict[str, np.ndarray]) -> None:
         self.classes = [str(c) for c in weights["classes"]]
         self.kind = str(weights.get("kind", "mlp"))
-        self.input = "mel" if self.kind == "cnn" else "features"
+        self.input = {"cnn": "mel", "ensemble": "both"}.get(self.kind, "features")
+        if self.kind == "ensemble":
+            # The two parts, and the blend: input is (feature window, mel window).
+            self.trees = Model({k[len("trees__"):]: v for k, v in weights.items() if k.startswith("trees__")})
+            self.cnn = Model({k[len("cnn__"):]: v for k, v in weights.items() if k.startswith("cnn__")})
+            self.trees_weight = float(weights["trees_weight"])
+            return
         if self.kind == "cnn":
             self.weights = weights
             self.level_mean, self.level_scale = float(weights["level_mean"]), float(weights["level_scale"])
@@ -179,7 +195,12 @@ class Model:
         except (FileNotFoundError, KeyError, ValueError, OSError):
             return None
 
-    def proba(self, x: np.ndarray) -> dict[str, float]:
+    def proba(self, x) -> dict[str, float]:
+        if self.kind == "ensemble":
+            features, mel = x
+            a, b = self.trees.proba(features), self.cnn.proba(mel)
+            w = self.trees_weight
+            return {c: w * a.get(c, 0.0) + (1 - w) * b.get(c, 0.0) for c in self.classes}
         return {c: float(v) for c, v in zip(self.classes, self.proba_batch(x)[0])}
 
 

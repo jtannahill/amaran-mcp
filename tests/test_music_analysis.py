@@ -136,3 +136,24 @@ def test_spectrogram_model_gets_sixteen_seconds_of_mel():
     fs = feed_in_blocks(a, kick_track(RATE, 30))
     assert stub.shapes and set(stub.shapes) == {(sections.MEL_FRAMES, 64)}
     assert fs[-1].section == "breakdown"
+
+
+class StubBothModel(StubModel):
+    input = "both"
+
+    def __init__(self, section):
+        super().__init__(section)
+        self.inputs = []
+
+    def proba(self, x):
+        self.inputs.append((np.shape(x[0]), np.shape(x[1])))
+        return super().proba(x)
+
+
+def test_ensemble_model_gets_features_and_mel():
+    from amaran_mcp.music import sections
+    stub = StubBothModel("breakdown")
+    a = Analyzer(RATE, model=stub)
+    fs = feed_in_blocks(a, kick_track(RATE, 30))
+    assert stub.inputs and set(stub.inputs) == {((sections.WINDOW_SIZE,), (sections.MEL_FRAMES, 64))}
+    assert fs[-1].section == "breakdown"

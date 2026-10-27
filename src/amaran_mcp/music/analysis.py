@@ -109,7 +109,8 @@ class Analyzer:
         self._seconds = section_model.Seconds()
         self._spectral = Spectral(rate)
         self._spectral_row: np.ndarray | None = None
-        self._mel_input = getattr(model, "input", "features") == "mel"
+        self._mel_input = getattr(model, "input", "features") in ("mel", "both")
+        self._both_inputs = getattr(model, "input", "features") == "both"
         self._mel = MelFrontend(rate) if self._mel_input else None
         self._mel_frames: deque = deque(maxlen=section_model.MEL_FRAMES)
         self._history: deque = deque(maxlen=section_model.WINDOW_SECONDS)
@@ -248,16 +249,17 @@ class Analyzer:
             self._decoder.follow("groove")
             return False
         self._decoder.follow(self.section)
+        rows = np.array(self._history)
+        features = section_model.window(rows, len(rows) - 1)
         if self._mel_input:
             if not self._mel_frames:
                 return False
             frames = np.array(self._mel_frames)
             if len(frames) < section_model.MEL_FRAMES:  # padded at the start, as in training
                 frames = np.concatenate([np.repeat(frames[:1], section_model.MEL_FRAMES - len(frames), axis=0), frames])
-            proba = self.model.proba(frames)
+            proba = self.model.proba((features, frames) if self._both_inputs else frames)
         else:
-            rows = np.array(self._history)
-            proba = self.model.proba(section_model.window(rows, len(rows) - 1))
+            proba = self.model.proba(features)
         self._model_sure = max(proba.values()) >= section_model.CONFIDENT
         proposed = self._decoder.step(proba)
         if proposed != self.section:
