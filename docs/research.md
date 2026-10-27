@@ -360,8 +360,8 @@ How the comparison was made, so both rows describe the same audio:
 The raw marks are noisy in the way live typing is: the same moment called
 twice, a lift called during a drop, no mark for a breakdown that is plainly
 there. They were read into sections the way an expert annotation is written,
-each with a start and an end, plus the named moments: the vocal entering at
-0:17, two lifts in the first drop, four lifts through the build into the last
+each with a start and an end, plus the named moments: Alina Renae's vocal
+coming in at 0:17, two lifts in the first drop, four lifts through the build into the last
 drop, and the peak at 3:37. The breakdown span is the one reading that rests
 on the gap in the marks and the audio rather than on a mark.
 

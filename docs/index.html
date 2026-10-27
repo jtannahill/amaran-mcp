@@ -270,12 +270,12 @@
   const TRACKS = {
     missyou: {
       soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (a best reading of live marks made while listening)",
-      name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You",
+      name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You", voice: "Alina Renae",
       honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end. Against that reading, music mode hears the breakdown from 2:13 almost exactly (it blooms at 2:23 and 2:37), the build into the last drop from 2:44, four seconds early, and the drop at 3:24 to the second. It misses the first build, hearing groove until the drop at 1:17, and it holds the last drop until 4:55, where the expert hears the outro from 4:00.",
     },
     throughitall: {
       youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Human expert marked (not marked yet)",
-      name: "nilsix and Clara Yates, Through It All",
+      name: "nilsix and Clara Yates, Through It All", voice: "Clara Yates",
       honest: "Captured silently from Black Hole Recordings' upload and run through the whole pipeline; nobody has marked it yet, so this is music mode on its own. It opens out at 1:01 and again at 2:51, and in the breakdown from 2:13 it blooms twice, at 2:35 and 2:41, as the chords lift onto D and E major.",
     },
     persiste: {
@@ -441,7 +441,7 @@
     }
     const extras = [WORDS[key][1]];
     if (f[2]) extras.push(`Chord: ${chordName(f[2])}.`);
-    if (f[3] >= 0.3) extras.push("A voice is singing.");
+    if (f[3] >= 0.3) extras.push(TRACKS[track].voice ? `${TRACKS[track].voice} is singing.` : "A voice is singing.");
     detail.textContent = extras.join(" ");
   }
 
