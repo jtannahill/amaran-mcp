@@ -224,3 +224,31 @@ def test_a_rejected_proposal_does_not_hold_an_intro_back():
     names = [f.section for f in fs]
     assert "build" in names
     assert names.index("build") * 1024 / RATE <= 14
+
+
+# ── Between songs: each song is heard fresh, as training heard every track ─────
+
+def test_a_new_tempo_after_a_gap_is_not_judged_at_the_old_one():
+    a = Analyzer(RATE)
+    feed_in_blocks(a, kick_track(RATE, 120, bpm=138))
+    feed_in_blocks(a, silence(RATE, 15))
+    after = feed_in_blocks(a, kick_track(RATE, 30, bpm=170))
+    assert any(f.section in ("groove", "build", "climax", "breakdown") for f in after[: int(10 * RATE / 1024)])
+
+
+def test_the_same_song_after_a_long_silence_does_not_fake_a_build_or_drop():
+    a = Analyzer(RATE)
+    first = feed_in_blocks(a, kick_track(RATE, 150, bpm=138))
+    feed_in_blocks(a, silence(RATE, 120))
+    second = feed_in_blocks(a, kick_track(RATE, 60, bpm=138))
+    assert {f.section for f in second} <= {f.section for f in first}
+    assert not any(f.release for f in second)
+
+
+def test_a_short_pause_inside_a_song_keeps_its_tempo():
+    a = Analyzer(RATE)
+    feed_in_blocks(a, kick_track(RATE, 60, bpm=138))
+    tempo = a.tempo
+    feed_in_blocks(a, silence(RATE, 1.7))  # one bar of silence before a drop
+    feed_in_blocks(a, kick_track(RATE, 5, bpm=138))
+    assert a.tempo is tempo and tempo.locked

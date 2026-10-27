@@ -253,7 +253,7 @@ The sections repeat; the colours do not, on purpose.
 |---|---|
 | Sections, blooms and when they land | Yes, within about a second. The section calls have no randomness and keep time by the audio itself, but live capture lands on a slightly different grid each play, so a call that sits right at a threshold (the 2 s hold, the 4-bar kick test, a bloom) can occasionally flip |
 | The colours | No. When the Music app names a new song, the light starts it on a palette stop picked at random from those not showing; from any other source (AirPlay, a browser, SoundCloud, YouTube) the groove's drift carries on from where the last track left it. Either way the same sections come in different colours |
-| The first 10 to 30 seconds | Not always. Tempo, key and level tracking carry over from the previous track |
+| The first 10 to 30 seconds | Yes, after a gap of 3 s or more: tempo, chord and sound tracking start fresh for each song, as training heard every track. In a gapless mix they carry on from the track before |
 | The demo page | Always. It replays one fixed capture, so the light is identical on every play |
 
 Any other light command stops music mode, except brightness, which moves its

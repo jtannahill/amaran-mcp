@@ -406,6 +406,21 @@ As a control, the same tracks decoded to 24 kHz by a different converter
 (scipy, straight from 44.1 kHz) scored 71%, no track moving by more than 0.04.
 To rerun at the live rate: `uv run python tools/live_check.py --rate 48000`.
 
+### Between songs
+
+Training heard every track from its start, but live the trackers carried one
+song into the next. A locked tempo never let go: a 170 BPM track after a
+138 BPM one stayed in the intro for its whole first minute, against 4 s on
+its own. And the timbre and spectral references kept learning through
+silence, so the same 138 BPM track played again after two minutes of quiet
+faked a build and a drop within 20 s, where its first play never left the
+groove. Now sound returning after 3 s or more of near-silence is a new song:
+tempo, chords, timbre, the spectral references and the model's 16 s window
+start fresh, while the loudness references, which learn only during music,
+stay. Three seconds is longer than the bar of silence some tracks hold before
+a drop, which keeps its tempo. The live check is unchanged at 72%; it plays
+each track on its own.
+
 ## The first marked session: Miss You
 
 Craig Connelly and Nicholas Gunn feat. Alina Renae, "Miss You". A human expert

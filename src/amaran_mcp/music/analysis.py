@@ -29,6 +29,9 @@ ENERGY_FALL = 4.0
 REFERENCE_SECONDS = 30.0  # long-term level the features are relative to
 SILENCE_FLOOR = 0.001  # about -60 dBFS
 SILENCE_SECONDS = 10.0
+# Sound back after this much near-silence is a new song: longer than the bar or
+# less of silence some tracks drop before a drop (1.7 s at 138 BPM).
+SONG_GAP_SECONDS = 3.0
 BASS_BAND = (40.0, 150.0)
 BASS_SHARE = 0.25  # bass amplitude / overall amplitude that counts as a beat
 MUSIC_ONSET = 2.0  # seconds of sustained bass before it counts as music
@@ -140,6 +143,7 @@ class Analyzer:
         self._tonal_time = 0.0
         self._no_music_time = 0.0
         self._quiet_time = 0.0
+        self._gap_time = 0.0  # continuous seconds below the silence floor
         self._kick_time = 0.0
         self._no_kick_time = 0.0
         self._build_time = 0.0
@@ -149,6 +153,23 @@ class Analyzer:
         self.is_music = False
         self.section = "silence"
         self._section_since = 0.0
+
+    def _new_song(self) -> None:
+        """Hear a new song as training heard every track: from the start, without the
+        last song's tempo, chords and sound, or what the silence taught the trackers.
+        Loudness references stay; they only learn while music plays."""
+
+        self.tempo = TempoTracker(self.rate)
+        self.harmony = HarmonyTracker(self.rate)
+        self.timbre = TimbreTracker(self.rate)
+        self._spectral = Spectral(self.rate)
+        self._spectral_row = None
+        self._mel = MelFrontend(self.rate) if self._mel_input else None
+        self._mel_frames.clear()
+        self._history.clear()
+        self._seconds = section_model.Seconds()
+        self._bass_blocks.clear()
+        self._bar_seconds = None
 
     def _bar(self) -> float:
         return self._bar_seconds or FALLBACK_BAR
@@ -169,6 +190,12 @@ class Analyzer:
         self._now += dt
         x = samples.astype(np.float64)
         level = float(np.sqrt(np.mean(x * x))) if n else 0.0
+        if level < SILENCE_FLOOR:
+            self._gap_time += dt
+        else:
+            if self._gap_time >= SONG_GAP_SECONDS:
+                self._new_song()
+            self._gap_time = 0.0
         bass = self._bass_amplitude(x)
         # A kick makes the bass pulse block to block; a breakdown's held
         # sub-bass does not. Seen on a real episode: level alone missed it.
