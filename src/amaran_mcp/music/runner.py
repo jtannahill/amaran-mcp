@@ -276,7 +276,8 @@ class _Run:
 
         try:
             async for block in self.source.blocks():
-                f = self.analyzer.feed(block)
+                classes = self.source.latest_classes() if hasattr(self.source, "latest_classes") else None
+                f = self.analyzer.feed(block, classes)
                 self._pending = f if self._pending is None else merge_events(self._pending, f)
                 self._latest = f
                 self.now += len(block) / self.source.rate

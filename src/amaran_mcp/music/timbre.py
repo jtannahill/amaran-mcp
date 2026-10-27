@@ -1,9 +1,11 @@
 """Vocal presence, tension and openness: the qualities beyond loudness.
 
-Vocal: pitch is tracked on what changes against the sustained bed (the
-spectrum minus its slow average), so pads cancel out and a voice remains; a
-voice is harmonic and its pitch moves (vibrato, glides). A lead synth with
-vibrato also reads as vocal; music mode only uses this to size the bloom.
+Vocal: from Apple's on-device sound classifier when the capture helper
+provides it (singing or choir, held down while speech is high, so a host
+talking over the music never counts). Otherwise a heuristic: pitch tracked on
+what changes against the sustained bed (the spectrum minus its slow average),
+so pads cancel out and a voice remains; a voice is harmonic and its pitch
+moves (vibrato, glides). Music mode uses the vocal reading to size the bloom.
 
 Tension: noisiness and brightness above 3 kHz (risers, sweeps) and onset
 density (snare rolls), each against its recent average.
@@ -42,6 +44,8 @@ class Timbre:
     tension: float  # 0..1
     openness: float  # 0..1
     level_db: float  # block level, dBFS
+    singing: float | None = None  # classifier confidences, when available
+    speech: float | None = None
 
 
 def _ease(value: float, target: float, dt: float, rise: float, fall: float) -> float:
@@ -73,7 +77,7 @@ class TimbreTracker:
         self._last_mag: np.ndarray | None = None
         self._now = 0.0
 
-    def feed(self, samples: np.ndarray) -> Timbre:
+    def feed(self, samples: np.ndarray, classes: dict[str, float] | None = None) -> Timbre:
         n = len(samples)
         dt = n / self.rate
         self._now += dt
@@ -82,10 +86,18 @@ class TimbreTracker:
         rms = float(np.sqrt(np.mean(x.astype(np.float64) ** 2))) if n else 0.0
         level_db = 20 * math.log10(rms) if rms > 1e-9 else -120.0
         mag = np.abs(np.fft.rfft(self._buffer * self._window))
-        self._update_vocal(mag, dt)
+        singing = speech = None
+        if classes:
+            singing = max(classes.get("singing", 0.0), classes.get("choir_singing", 0.0))
+            speech = classes.get("speech", 0.0)
+            # Speech above 0.5 holds the vocal down, fully at 1.0.
+            target = singing * max(0.0, 1 - 2 * max(0.0, speech - 0.5))
+            self._vocal = _ease(self._vocal, target, dt, VOCAL_RISE, VOCAL_FALL)
+        else:
+            self._update_vocal(mag, dt)
         self._update_tension(mag, dt)
         self._update_openness(mag, dt)
-        return Timbre(self._vocal, self._tension, self._openness, level_db)
+        return Timbre(self._vocal, self._tension, self._openness, level_db, singing, speech)
 
     # ── Vocal ────────────────────────────────────────────────────────────────
 

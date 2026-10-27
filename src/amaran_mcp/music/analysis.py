@@ -134,7 +134,7 @@ class Analyzer:
         if section != self.section:
             self.section, self._section_since = section, self._now
 
-    def feed(self, samples: np.ndarray) -> Features:
+    def feed(self, samples: np.ndarray, classes: dict[str, float] | None = None) -> Features:
         n = len(samples)
         dt = n / self.rate
         self._now += dt
@@ -151,7 +151,7 @@ class Analyzer:
         pulsing = self._pulse_cv > KICK_PULSE
         beat = self.tempo.feed(samples)
         harmony = self.harmony.feed(samples)
-        timbre = self.timbre.feed(samples)
+        timbre = self.timbre.feed(samples, classes)
         if beat.bpm:
             self._bar_seconds = 4 * 60 / beat.bpm
 
