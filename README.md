@@ -84,7 +84,8 @@ and amaran Desktop with the light paired in it.
    uv tool install amaran-mcp
    ```
 
-   For the newest code before a release, install from GitHub instead:
+   Without uv, `pip install amaran-mcp` (Python 3.12 or newer) works too;
+   use `pip install --upgrade amaran-mcp` to update. For the newest code before a release, install from GitHub instead:
    `uv tool install git+https://github.com/jtannahill/amaran-mcp`.
 
 2. Quit amaran Desktop fully (it keeps running after its window closes, and
