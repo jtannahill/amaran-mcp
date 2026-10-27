@@ -252,13 +252,27 @@ def main() -> None:
             _launch_agent(args.command == "install-listener")
         elif args.command == "music-stop":
             from .music import control
-            print("stopped" if control.stop() else "music mode was not running")
+            print({"settled": "stopped", "killed": "stopped (the fade back did not finish)"}.get(
+                control.stop(), "music mode was not running"))
         elif args.command == "music-probe":
             _music_probe(float(args.values[0]) if args.values else 10)
         elif args.command == "serve":
             from .server import mcp
             mcp.run()
         else:
-            asyncio.run(_run(args))
+            from .music import control
+
+            if args.command in ("brightness", "white", "color", "effect") and not args.values:
+                raise ValueError(f"{args.command} needs a value (see amaran-mcp --help)")
+            music = control.status() if args.command != "status" else None
+            if music and args.command == "brightness":
+                # As in the server: brightness moves music mode's range instead of stopping it.
+                offset = control.set_brightness(float(args.values[0]))
+                low, high = control.brightness_range(music.get("mood") or "ethereal", offset)
+                print(f"music mode brightness range moved to {low:g}..{high:g}%")
+            else:
+                if music:
+                    control.stop()  # never fight music mode for the light
+                asyncio.run(_run(args))
     except (CaptureError, ConfigError, DesktopError, LinkError, ValueError) as err:
         raise SystemExit(f"error: {err}") from None

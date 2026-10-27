@@ -73,7 +73,11 @@ class MeshLink:
             except BleakError as err:
                 log.info("write failed (%s); reconnecting once", err)
                 await self._drop()
-                await self._send_access(await self._ensure(), payloads)
+                try:
+                    await self._send_access(await self._ensure(), payloads)
+                except BleakError as again:
+                    await self._drop()
+                    raise LinkError(f"Lost the Bluetooth link to the light ({again}).") from again
             self._arm_idle()
 
     async def query(
@@ -85,21 +89,36 @@ class MeshLink:
         """Send a request and return the first reply that pick() accepts."""
 
         async with self._lock:
-            client = await self._ensure()
-            future: asyncio.Future = asyncio.get_running_loop().create_future()
-            waiter = (pick, future)
-            self._waiters.append(waiter)
             try:
-                for _ in range(2):
-                    await self._send_access(client, [payload])
+                try:
+                    return await self._query(payload, pick, timeout)
+                except BleakError as err:
+                    log.info("query failed (%s); reconnecting once", err)
+                    await self._drop()
                     try:
-                        return await asyncio.wait_for(asyncio.shield(future), timeout)
-                    except TimeoutError:
-                        continue
-                return None
+                        return await self._query(payload, pick, timeout)
+                    except BleakError as again:
+                        await self._drop()
+                        raise LinkError(f"Lost the Bluetooth link to the light ({again}).") from again
             finally:
-                self._waiters.remove(waiter)
                 self._arm_idle()
+
+    async def _query(self, payload: bytes, pick: Callable[[DecodedAccessMessage], T | None],
+                     timeout: float) -> T | None:
+        client = await self._ensure()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        waiter = (pick, future)
+        self._waiters.append(waiter)
+        try:
+            for _ in range(2):
+                await self._send_access(client, [payload])
+                try:
+                    return await asyncio.wait_for(asyncio.shield(future), timeout)
+                except TimeoutError:
+                    continue
+            return None
+        finally:
+            self._waiters.remove(waiter)
 
     async def close(self) -> None:
         if self._idle_task:
@@ -146,6 +165,9 @@ class MeshLink:
                 await asyncio.wait_for(self._filter_status.wait(), 2.0)
             except TimeoutError:
                 log.info("no proxy filter status; replies may not arrive")
+        except BleakError as err:
+            await self._drop()
+            raise LinkError(f"Connected to the light, but it stopped answering ({err}).") from err
         except BaseException:
             await self._drop()
             raise
@@ -169,10 +191,19 @@ class MeshLink:
                 return False
             if len(data) >= 9 and data[0] == 0x00 and data[1:9] == network_id:
                 return True
-            others[device.address] = device
+            if data[:1] == b"\x01":
+                # Node Identity: it hides its network, so it may be ours. A proxy
+                # naming a different network is a neighbour's light, never a candidate.
+                others[device.address] = device
             return False
 
-        device = await BleakScanner.find_device_by_filter(ours, timeout=20.0)
+        try:
+            device = await BleakScanner.find_device_by_filter(ours, timeout=20.0)
+        except BleakError as err:
+            raise LinkError(
+                f"Could not scan for the light ({err}). Check that Bluetooth is on and that "
+                "this app may use it (System Settings, Privacy and Security, Bluetooth)."
+            ) from err
         if device:
             return device
         if len(others) == 1:

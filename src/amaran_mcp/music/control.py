@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 
-from ..config import CONFIG_DIR, _write_private
+from ..config import CONFIG_DIR, _write_private, is_ours
 from . import runner
 from .moods import MOODS
 
@@ -46,13 +46,17 @@ def _pid() -> int | None:
         return None
 
 
+def _ours(pid: int) -> bool:
+    return is_ours(pid, "music")
+
+
 def status() -> dict | None:
     """What music mode is doing, or None when it is not running."""
 
     pid = _pid()
     if pid is None:
         return None
-    if not _alive(pid):
+    if not (_alive(pid) and _ours(pid)):
         PID_PATH.unlink(missing_ok=True)
         return None
     music = {"running": True, **(runner.status_of() or {}), "pid": pid}
@@ -118,21 +122,29 @@ def mark(kind: str, note: str | None = None) -> dict:
     return entry
 
 
-def stop(timeout: float = 8.0) -> bool:
-    """Ask music mode to settle the light back and exit. True if it was running."""
+def stop(timeout: float = 15.0) -> str | None:
+    """Ask music mode to settle the light back and exit. Returns "settled", or "killed"
+    when it did not finish in time (the light may still show its last colour), or None
+    when it was not running."""
 
     pid = _pid()
-    if pid is None or not _alive(pid):
+    if pid is None or not (_alive(pid) and _ours(pid)):
         PID_PATH.unlink(missing_ok=True)
-        return False
+        return None
     os.kill(pid, signal.SIGTERM)
     deadline = time.monotonic() + timeout
     while _alive(pid) and time.monotonic() < deadline:
         time.sleep(0.1)
+    result = "settled"
     if _alive(pid):
-        os.kill(pid, signal.SIGKILL)
+        # It leads its own session: take its audio helper and encoder down with it.
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        result = "killed"
     PID_PATH.unlink(missing_ok=True)
-    return True
+    return result
 
 
 def brightness_range(mood: str, offset: float) -> tuple[float, float]:

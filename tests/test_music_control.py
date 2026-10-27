@@ -21,6 +21,7 @@ def control(tmp_path, monkeypatch):
 def test_start_writes_pid_and_restarts_with_new_mood(control, monkeypatch):
     spawned = []
     monkeypatch.setattr(control, "_alive", lambda pid: pid in spawned)
+    monkeypatch.setattr(control, "_ours", lambda pid: True)
     monkeypatch.setattr(control, "stop", lambda timeout=8.0: spawned.clear() or True)
     control.start("deep", spawn=lambda argv: spawned.append(4242) or 4242)
     assert control.PID_PATH.read_text().strip() == "4242"

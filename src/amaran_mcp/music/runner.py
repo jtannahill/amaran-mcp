@@ -81,6 +81,8 @@ class RunnerConfig:
     record: bool = True  # save the session (FLAC, feature log, marks) for training
 
 
+DRAIN_SECONDS = 5.0  # how long shutdown waits for one light command
+
 class _Writer:
     """Sends light commands one at a time, newest first, dropping stale ones."""
 
@@ -121,9 +123,18 @@ class _Writer:
         except (DesktopError, LinkError, ValueError, OSError) as err:
             log.warning("light command failed: %s", err)
             self._on_error(f"light command failed: {err}")
+        except Exception as err:  # anything else: report it, but keep the writer alive
+            log.exception("light command failed")
+            self._on_error(f"light command failed: {err}")
 
-    async def drain(self) -> None:
-        await self._idle.wait()
+    async def drain(self, timeout: float = DRAIN_SECONDS) -> bool:
+        """Wait for the last command to go out; False if the light did not take it in time."""
+
+        try:
+            await asyncio.wait_for(self._idle.wait(), timeout)
+            return True
+        except TimeoutError:
+            return False
 
     async def close(self) -> None:
         await self.drain()
@@ -370,7 +381,9 @@ class _Run:
                 self._plan_settle(self.renderer._out)
             while self._fade:
                 self.writer.post(self._fade.pop(0))
-                await self.writer.drain()
+                if not await self.writer.drain():
+                    log.warning("the light stopped taking commands; leaving it as it is")
+                    self._fade.clear()
             await self.writer.close()
             if self.state == "settling":
                 self.state = "listening"

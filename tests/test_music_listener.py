@@ -85,6 +85,7 @@ def test_status_shows_the_listeners_recording(listener, monkeypatch):
     importlib.reload(control)
     monkeypatch.setattr(control, "_pid", lambda: 7)
     monkeypatch.setattr(control, "_alive", lambda pid: True)
+    monkeypatch.setattr(control, "_ours", lambda pid: True)
     monkeypatch.setattr(runner, "status_of", lambda: {"state": "listening", "recording": None})
     monkeypatch.setattr(listener, "status", lambda: {"recording": "/tmp/session", "recording_stopped": None, "pid": 1})
     music = control.status()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import colorsys
@@ -59,11 +60,11 @@ def tool(**options: Any):
     return register
 
 
-def take_over() -> None:
+async def take_over() -> None:
     """A direct light command ends music mode first, so the two never fight."""
 
     if control.status():
-        control.stop()
+        await asyncio.to_thread(control.stop)
 
 
 Percent = Annotated[float, Field(ge=0, le=100, description="Brightness, 0-100 %")]
@@ -97,7 +98,7 @@ async def get_light() -> dict[str, Any]:
 async def set_power(on: bool) -> str:
     """Turn the light on or off. On restores what it was doing before."""
 
-    take_over()
+    await take_over()
     await light().set_power(on)
     return "on" if on else "off"
 
@@ -125,7 +126,7 @@ async def set_white(
 ) -> str:
     """Set white light by colour temperature. get_light shows this model's range."""
 
-    take_over()
+    await take_over()
     lamp = light()
     await lamp.set_white(kelvin, brightness, tint)
     return f"white {kelvin}K at {lamp.state.brightness}%" + (f", tint {tint:+d}" if tint else "")
@@ -149,7 +150,7 @@ async def set_color(
         hue, saturation = h * 360, s * 100
     if hue is None:
         raise ValueError("Give a hue or a hex colour")
-    take_over()
+    await take_over()
     lamp = light()
     await lamp.set_color(hue, saturation, brightness)
     return f"colour hue {lamp.state.hue}, saturation {lamp.state.saturation}% at {lamp.state.brightness}%"
@@ -162,7 +163,7 @@ async def set_effect(
 ) -> str:
     """Start one of the light's built-in effects."""
 
-    take_over()
+    await take_over()
     lamp = light()
     await lamp.set_effect(effect, brightness)
     return f"effect {effect} at {lamp.state.brightness}%"
@@ -172,7 +173,7 @@ async def set_effect(
 async def stop_effect() -> str:
     """Stop the running effect and return to the last steady white or colour."""
 
-    take_over()
+    await take_over()
     await light().stop_effect()
     return "effect stopped"
 
@@ -190,7 +191,7 @@ async def save_scene(name: str) -> dict[str, Any]:
 async def recall_scene(name: str) -> dict[str, Any]:
     """Put the light back into a saved scene. get_light lists the saved scenes."""
 
-    take_over()
+    await take_over()
     return await light().recall_scene(name)
 
 
@@ -203,15 +204,21 @@ async def start_music_mode(
 
     if mood not in MOODS:
         raise ValueError(f"Unknown mood {mood!r}. Moods: {', '.join(MOODS)}")
-    return control.start(mood, record=record)
+    # The light takes one Bluetooth connection; music mode needs it, not this server.
+    await close_all()
+    return await asyncio.to_thread(control.start, mood, record=record)
 
 
 @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
 async def stop_music_mode() -> str:
     """Stop music mode and return the light to how it was."""
 
-    if control.stop():
+    result = await asyncio.to_thread(control.stop)
+    if result == "settled":
         return "music mode stopped; the light is back to how it was"
+    if result == "killed":
+        return ("music mode stopped, but it did not finish fading back in time, "
+                "so the light may still show its last colour")
     return "music mode was not running"
 
 

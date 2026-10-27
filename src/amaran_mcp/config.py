@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import asdict, dataclass, field
+import fcntl
 import glob
 import json
 import os
@@ -56,6 +57,16 @@ class Capabilities:
     effects: list[str] = field(default_factory=list)  # Desktop flags, e.g. "cop_car"
 
 
+def is_ours(pid: int, role: str) -> bool:
+    """Whether a live PID is this project's `role` process ("music", "listen"). A PID file
+    can outlive its process (a crash, a reboot) and the number go to another program."""
+
+    import subprocess
+
+    command = subprocess.run(["ps", "-p", str(pid), "-o", "command="], capture_output=True, text=True).stdout
+    return ("amaran_mcp" in command or "amaran-mcp" in command) and role in command.split()
+
+
 def _write_private(path: Path, data: Any) -> None:
     """Write JSON readable only by this user; the light file holds mesh keys."""
 
@@ -103,6 +114,20 @@ def capabilities(light: Light) -> Capabilities:
     )
 
 
+@contextmanager
+def _state_lock():
+    """The MCP server, music mode and the CLI all send as the same mesh address, so
+    they share one sequence counter; this lock makes each reservation whole."""
+
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(STATE_PATH.with_suffix(".lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 class StateStore:
     """Mesh counters that must survive restarts, plus the remembered device."""
 
@@ -113,6 +138,15 @@ class StateStore:
         self.ble_address: str | None = data.get("ble_address")
 
     def save(self) -> None:
+        with _state_lock():
+            self._catch_up()
+            self._write()
+
+    def _catch_up(self) -> None:
+        # Another process may have sent since this one last looked: never go back.
+        self.next_seq = max(self.next_seq, _read(STATE_PATH, {}).get("next_seq", 1))
+
+    def _write(self) -> None:
         _write_private(STATE_PATH, {
             "next_seq": self.next_seq,
             "iv_index": self.iv_index,
@@ -122,11 +156,13 @@ class StateStore:
     def reserve(self, count: int) -> range:
         """Hand out sequence numbers, saving before any of them are used."""
 
-        first = self.next_seq
-        if first + count > 0xFFFFFF:
-            raise ConfigError("Mesh sequence numbers are used up; re-run amaran-mcp import")
-        self.next_seq = first + count
-        self.save()
+        with _state_lock():
+            self._catch_up()
+            first = self.next_seq
+            if first + count > 0xFFFFFF:
+                raise ConfigError("Mesh sequence numbers are used up; re-run amaran-mcp import")
+            self.next_seq = first + count
+            self._write()
         return range(first, first + count)
 
     def set_iv_index(self, iv_index: int) -> None:

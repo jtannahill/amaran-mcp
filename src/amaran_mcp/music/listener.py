@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-from ..config import CONFIG_DIR, _write_private
+from ..config import CONFIG_DIR, _write_private, is_ours
 from .analysis import Analyzer
 from .capture import CaptureError, Source, SystemAudio
 from .recorder import RECORDINGS_DIR, Recorder
@@ -41,12 +41,13 @@ def status() -> dict | None:
     except (FileNotFoundError, ValueError):
         return None
     try:
-        os.kill(int(data.get("pid", -1)), 0)
+        pid = int(data.get("pid", -1))
+        os.kill(pid, 0)
     except (ProcessLookupError, ValueError, OverflowError):
         return None
     except PermissionError:
         pass
-    return data
+    return data if is_ours(pid, "listen") else None
 
 
 class _Session:
