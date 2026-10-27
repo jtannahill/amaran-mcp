@@ -28,7 +28,7 @@ HUE_RATE = 30.0
 SATURATION_RATE = 20.0
 BRIGHTNESS_RATE = 12.0
 
-BREAKDOWN_SATURATION = 25.0  # the pale opening of a breakdown
+BREAKDOWN_SATURATION = 40.0  # the paler opening of a breakdown (still a colour)
 PALE_BARS = 2
 FALLBACK_BAR = 1.8  # seconds per bar when the tempo is unknown
 PALE_ANCHOR = 30.0  # stops below this saturation are for drifting, not for releases
@@ -42,8 +42,8 @@ BLOOM_RISE, BLOOM_FALL = 1.5, 1.5  # seconds (time constants)
 BLOOM_HOLD = 4.0  # seconds a bloom lasts at least
 BLOOM_MAX_PHRASES = 2
 BLOOM_VOCAL_END = 0.3  # the bloom eases back once the vocal falls below this
-BLOOM_SATURATION = 15.0  # luminous: up to this much less saturation
-OPEN_SATURATION, OPEN_BRIGHTNESS = 15.0, 10.0  # at full openness
+BLOOM_SATURATION = 6.0  # luminous through brightness, barely whiter
+OPEN_SATURATION, OPEN_BRIGHTNESS = 6.0, 10.0  # at full openness
 
 
 @dataclass
@@ -191,7 +191,7 @@ class Renderer:
                 saturation = min(anchor_saturation, BREAKDOWN_SATURATION)
             else:
                 wander = WANDER_DEGREES * math.sin(2 * math.pi * self._now / WANDER_SECONDS)
-                hue, saturation = (chord[0] + wander) % 360, chord[1] * (0.6 + 0.4 * f.energy)
+                hue, saturation = (chord[0] + wander) % 360, chord[1] * (0.85 + 0.15 * f.energy)
         elif section == "build":
             # Gathering: the drift stops as tension rises; colour deepens; hold.
             hue, anchor_saturation = self._drift(f, dt, speed_factor=max(0.0, 1 - f.timbre.tension / 0.8))
@@ -207,7 +207,7 @@ class Renderer:
             hue, anchor_saturation = self._drift(f, dt)
             span = (high - low) / 3 if section == "intro" else high - low
             brightness = low + f.energy * span
-            saturation = anchor_saturation * (0.6 + 0.4 * f.energy)
+            saturation = anchor_saturation * (0.85 + 0.15 * f.energy)
 
         if self._bloom > 0.01:
             warm = self._chord_colour(f, "warm") or (self.mood.warm or self.mood.anchors)[0]

@@ -3,6 +3,7 @@
 import random
 
 from amaran_mcp.music.moods import MOODS
+from amaran_mcp.music import render
 from amaran_mcp.music.render import Renderer
 from music_fixtures import make_features
 
@@ -64,10 +65,12 @@ def test_brightness_offset_shifts_range():
 
 
 def test_drop_skips_pale_anchors():
-    """A drop lands on a colour, never on the misty white stop."""
-    r = Renderer(MOODS["ethereal"], start_anchor=2)  # soft teal; next stop is misty white
+    """A drop lands on a colour, never on a near-white stop."""
+    from dataclasses import replace
+    misty = replace(MOODS["ethereal"], anchors=((225, 85), (270, 78), (190, 70), (220, 12)))
+    r = Renderer(misty, start_anchor=2)  # teal; the next stop is misty white
     run(r, LOUD, 1)
-    assert r.current_target_hue_after_drop() == MOODS["ethereal"].anchors[0][0]
+    assert r.current_target_hue_after_drop() == misty.anchors[0][0]
     outs = [r.step(DROP, 1 / 8)] + run(r, LOUD, 4)
     assert outs[-1].saturation >= 40
 
@@ -103,9 +106,9 @@ def test_breakdown_starts_pale_then_takes_chord_colour():
     r = Renderer(MOODS["ethereal"])
     run(r, groove_f(), 10)
     early = run(r, breakdown_f(seconds=1, chord_root=9, balance=-0.8), 3)[-1]
-    assert early.saturation <= 25
+    assert early.saturation <= render.BREAKDOWN_SATURATION
     later = run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.8), 6)[-1]
-    assert later.saturation > 35 and 210 <= later.hue <= 280      # cool family
+    assert later.saturation > early.saturation + 15 and 210 <= later.hue <= 280      # cool family
 
 
 def test_major_balance_moves_to_warm_family():
@@ -173,3 +176,20 @@ def test_openness_reads_luminous():
     closed = run(Renderer(MOODS["ethereal"]), groove_f(openness=0.0), 15)[-1]
     open_ = run(Renderer(MOODS["ethereal"]), groove_f(openness=1.0), 15)[-1]
     assert open_.saturation < closed.saturation and open_.brightness > closed.brightness
+
+
+def test_trance_reads_as_colour_not_grey():
+    # The owner: "the trance music should have more color". Through a whole
+    # track (groove, a breakdown with its chords and a lift, build, drop) the
+    # light holds real saturation; at 34 on average it read as grey.
+    for name, mood in MOODS.items():
+        r = Renderer(mood)
+        outs = run(r, intro_f(), 8) + run(r, groove_f(0.4), 20) + run(r, groove_f(0.8), 20)
+        for i, root in enumerate((10, 8, 6, 8)):
+            outs += run(r, breakdown_f(seconds=8.0 + 6 * i, chord_root=root, balance=-0.8), 6)
+        outs += run(r, breakdown_f(seconds=32.0, chord_root=8, balance=0.8, bloom=True, vocal=0.6), 1)
+        outs += run(r, breakdown_f(seconds=33.0, chord_root=8, balance=0.8, vocal=0.6), 8)
+        outs += run(r, build_f(), 10) + [r.step(climax_f(release=True), 1 / 8)] + run(r, climax_f(), 20)
+        sats = [o.saturation for o in outs[8 * 8:]]  # after the intro
+        assert sum(sats) / len(sats) >= 55, name
+        assert sum(s < 30 for s in sats) / len(sats) <= 0.1, name

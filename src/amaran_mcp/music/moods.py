@@ -22,30 +22,30 @@ class Mood:
 MOODS: dict[str, Mood] = {
     "ethereal": Mood(
         "ethereal",
-        anchors=((225, 70), (270, 60), (185, 45), (220, 12)),  # deep blue, violet, soft teal, misty white
+        anchors=((225, 85), (270, 78), (190, 70), (300, 65)),  # deep blue, violet, teal, orchid
         brightness=(25, 70),
-        max_saturation=75,
+        max_saturation=90,
         loop_seconds=75,
-        cool=((215, 70), (240, 65), (265, 60)),  # deep blue, indigo, violet
-        warm=((285, 45), (310, 42), (335, 40), (15, 35)),  # lavender, orchid, rose, peach
+        cool=((215, 85), (240, 82), (265, 78)),  # deep blue, indigo, violet
+        warm=((290, 72), (310, 70), (335, 66), (15, 60)),  # lavender, orchid, rose, peach
     ),
     "deep": Mood(
         "deep",
-        anchors=((245, 80), (220, 85), (290, 65)),  # indigo, navy, magenta-violet
+        anchors=((245, 90), (220, 92), (290, 80)),  # indigo, navy, magenta-violet
         brightness=(20, 55),
-        max_saturation=85,
+        max_saturation=95,
         loop_seconds=90,
-        cool=((230, 85), (250, 82), (275, 75)),
-        warm=((295, 70), (320, 65), (345, 60)),
+        cool=((230, 92), (250, 90), (275, 85)),
+        warm=((295, 82), (320, 78), (345, 74)),
     ),
     "dawn": Mood(
         "dawn",
-        anchors=((265, 35), (25, 45), (45, 40), (35, 10)),  # lavender, peach, pale gold, warm white
+        anchors=((265, 62), (25, 72), (45, 66), (330, 60)),  # lavender, peach, gold, rose
         brightness=(30, 70),
-        max_saturation=55,
+        max_saturation=80,
         loop_seconds=60,
-        cool=((250, 40), (270, 36), (290, 34)),
-        warm=((15, 45), (35, 45), (50, 40)),  # peach, apricot, pale gold
+        cool=((250, 66), (270, 62), (290, 60)),
+        warm=((15, 72), (35, 72), (50, 66)),  # peach, apricot, gold
     ),
 }
 DEFAULT_MOOD = "ethereal"
