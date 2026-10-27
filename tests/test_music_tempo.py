@@ -9,7 +9,7 @@ from music_fixtures import feed_in_blocks, kick_track, pads_only
 RATE = 24000
 
 
-@pytest.mark.parametrize("bpm", [125, 138])
+@pytest.mark.parametrize("bpm", [125, 138, 150, 156])  # 150: ASOT 1300; hard trance runs past it
 def test_tempo_locks_within_one_bpm(bpm):
     beats = feed_in_blocks(TempoTracker(RATE), kick_track(RATE, 30, bpm=bpm))
     assert beats[-1].bpm == pytest.approx(bpm, abs=1)

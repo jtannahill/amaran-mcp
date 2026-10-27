@@ -10,6 +10,11 @@
 //
 // The tap listens to every process's output (AirPlay Receiver included) after
 // mixing, so it never opens a microphone and never touches AirPods' input.
+//
+// With --only-bundle PREFIX it taps only the apps whose bundle ID starts with
+// PREFIX (com.google.Chrome takes in Chrome's audio helper), which must already
+// be playing or paused mid-track. With --mute those apps go silent on the
+// speakers while the tap reads them: a track can be captured without being heard.
 
 import AudioToolbox
 import AVFoundation
@@ -49,12 +54,18 @@ func defaultOutputUID() -> String {
 
 var classifyFD: Int32? = nil
 var classifyFile: String? = nil
+var onlyBundle: String? = nil
+var muteTapped = false
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
     if argument == "--classify-fd", let value = arguments.popFirst(), let fd = Int32(value) {
         classifyFD = fd
     } else if argument == "--classify-file", let value = arguments.popFirst() {
         classifyFile = value
+    } else if argument == "--only-bundle", let value = arguments.popFirst() {
+        onlyBundle = value
+    } else if argument == "--mute" {
+        muteTapped = true
     } else {
         FileHandle.standardError.write("amaran-systemtap: unknown option \(argument)\n".data(using: .utf8)!)
         exit(2)
@@ -101,11 +112,39 @@ if let path = classifyFile {
     }
 }
 
-// 1. A private tap on all processes' output, mixed to mono.
-let tap = CATapDescription(monoGlobalTapButExcludeProcesses: [])
+/// Core Audio's process objects for the apps whose bundle ID starts with `prefix`.
+func processObjects(bundlePrefix prefix: String) -> [AudioObjectID] {
+    var listAddress = address(kAudioHardwarePropertyProcessObjectList)
+    var size: UInt32 = 0
+    check(AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &size),
+          "could not list audio processes")
+    var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+    check(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &listAddress, 0, nil, &size, &ids),
+          "could not list audio processes")
+    return ids.filter { id in
+        var bundleAddress = address(kAudioProcessPropertyBundleID)
+        var bundle: Unmanaged<CFString>?
+        var bundleSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &bundleAddress, 0, nil, &bundleSize, &bundle) == noErr,
+              let value = bundle?.takeRetainedValue() as String? else { return false }
+        return value.hasPrefix(prefix)
+    }
+}
+
+// 1. A private tap, mixed to mono: every process's output, or only the named apps'.
+let tap: CATapDescription
+if let prefix = onlyBundle {
+    let processes = processObjects(bundlePrefix: prefix)
+    if processes.isEmpty {
+        fail("no audio from an app whose bundle ID starts with \(prefix); start playback first", -1)
+    }
+    tap = CATapDescription(monoMixdownOfProcesses: processes)
+} else {
+    tap = CATapDescription(monoGlobalTapButExcludeProcesses: [])
+}
 tap.name = "amaran-mcp music mode"
 tap.isPrivate = true
-tap.muteBehavior = .unmuted
+tap.muteBehavior = muteTapped ? .mutedWhenTapped : .unmuted
 var tapID = AudioObjectID(kAudioObjectUnknown)
 check(AudioHardwareCreateProcessTap(tap, &tapID), "could not create the system audio tap")
 

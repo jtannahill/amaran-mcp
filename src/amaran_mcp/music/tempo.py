@@ -1,7 +1,7 @@
 """Tempo, bars and 8-bar phrases, so colour moves can land on the music's phrasing.
 
 An onset envelope from the kick band (about 10 ms steps) is autocorrelated to
-find the tempo between 100 and 150 BPM. Once confident, a beat grid is locked
+find the tempo between 100 and 160 BPM. Once confident, a beat grid is locked
 and then only nudged, so bar and phrase boundaries stay steady. Bars are 4
 beats and phrases 8 bars, counted from the first locked beat (there is no
 downbeat detection; in four-on-the-floor music the grid is what matters).
@@ -15,7 +15,7 @@ import math
 
 import numpy as np
 
-BPM_RANGE = (100.0, 150.0)
+BPM_RANGE = (100.0, 160.0)  # trance sits near 138; ASOT plays hard trance at 150 and beyond
 WINDOW_SECONDS = 8.0  # envelope history used for the estimate
 ESTIMATE_EVERY = 0.5  # seconds between estimates
 MIN_HISTORY = 4.0  # seconds before the first estimate
