@@ -31,18 +31,24 @@ def command(helper: str, bundle: str, mute: bool) -> list[str]:
 def read_stream(stream: BinaryIO, seconds: float) -> tuple[int, np.ndarray]:
     """The helper's output: a "RATE <hz>" line, then float32 mono samples."""
 
-    header = stream.readline().decode().split()
+    line = stream.readline()
+    if not line:
+        raise ValueError("the helper stopped before sending audio (is the app playing? see its message above)")
+    header = line.decode().split()
     if len(header) != 2 or header[0] != "RATE":
         raise ValueError(f"unexpected helper output: {' '.join(header)!r}")
     rate = int(header[1])
     wanted = int(seconds * rate) * 4
     chunks, total = [], 0
-    while total < wanted:
-        chunk = stream.read(min(65536, wanted - total))
-        if not chunk:
-            break
-        chunks.append(chunk)
-        total += len(chunk)
+    try:
+        while total < wanted:
+            chunk = stream.read(min(65536, wanted - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+    except KeyboardInterrupt:  # stopped early: keep what was read
+        print("stopped early; keeping what was captured", file=sys.stderr)
     data = b"".join(chunks)
     return rate, np.frombuffer(data[: len(data) // 4 * 4], dtype="<f4").copy()
 
@@ -52,6 +58,8 @@ def write_wav(path: Path, rate: int, samples: np.ndarray) -> None:
     reaches about 2) is scaled down rather than clipped."""
 
     peak = float(np.abs(samples).max(initial=0))
+    if peak == 0:
+        raise ValueError("the capture is silent: the app played nothing the tap could hear")
     if peak > 1:
         samples = samples / peak
     with wave.open(str(path), "wb") as out:
@@ -71,14 +79,25 @@ def main() -> None:
     parser.add_argument("--mute", action="store_true")
     args = parser.parse_args()
     process = subprocess.Popen(command(str(helper_path()), args.bundle, args.mute), stdout=subprocess.PIPE)
+    rate, samples = 0, np.zeros(0, dtype=np.float32)
     try:
         rate, samples = read_stream(process.stdout, args.seconds)
+    except ValueError as err:
+        sys.exit(f"capture failed: {err}")
     finally:
+        # Whatever happened, the helper must go: while it runs, a muted app stays muted.
         process.terminate()
-        process.wait(timeout=10)
-    if process.returncode not in (0, -15) and samples.size == 0:
-        sys.exit(f"capture failed (helper exit {process.returncode})")
-    write_wav(args.out, rate, samples)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+    if not rate:
+        sys.exit("capture failed: nothing was read")
+    try:
+        write_wav(args.out, rate, samples)
+    except ValueError as err:
+        sys.exit(f"capture failed: {err}")
     print(f"{len(samples) / rate:.1f} s at {rate} Hz, peak {float(np.abs(samples).max(initial=0)):.2f}")
 
 

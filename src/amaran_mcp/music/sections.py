@@ -206,7 +206,7 @@ class Model:
 
 # Which section may follow which: the model proposes, the music decides.
 ALLOWED = {
-    "intro": {"groove", "breakdown", "build"},
+    "intro": {"build", "climax"},  # the model never saw an intro (SSME has none): only these end one
     "groove": {"breakdown", "build", "climax"},  # a drop need not follow a marked build
     "breakdown": {"build", "climax", "groove"},
     "build": {"climax", "breakdown"},

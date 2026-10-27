@@ -194,10 +194,33 @@ def test_rules_do_not_undo_a_section_before_its_minimum():
     # Seen on Miss You at 1:48: the model entered a build, went unsure two seconds
     # later, and the rules, hearing the kick, sent it straight back to a drop.
     from amaran_mcp.music import sections
-    a = Analyzer(RATE, model=SureThenUnsure("build", sure=5))
+    a = Analyzer(RATE, model=SureThenUnsure("build", sure=12))
     fs = feed_in_blocks(a, kick_track(RATE, 40))
     names = [f.section for f in fs]
     assert "build" in names
     start = names.index("build")
     lasted = next((i for i in range(start, len(names)) if names[i] != "build"), len(names)) - start
     assert lasted * 1024 / RATE >= sections.MIN_STAY - 0.5
+
+
+class Sequence(StubModel):
+    """Sure of one section for the first `first` calls, then of another."""
+
+    def __init__(self, first_section, first, then_section):
+        super().__init__(first_section)
+        self.calls, self.first, self.then = 0, first, then_section
+
+    def proba(self, x):
+        self.calls += 1
+        self.section = self.section if self.calls <= self.first else self.then
+        return super().proba(x)
+
+
+def test_a_rejected_proposal_does_not_hold_an_intro_back():
+    # A model sure of a breakdown in an intro is ignored (an intro ends with a
+    # build or a drop); it must not cost the next, valid proposal 8 s.
+    a = Analyzer(RATE, model=Sequence("breakdown", 6, "build"))
+    fs = feed_in_blocks(a, pads_only(RATE, 40))
+    names = [f.section for f in fs]
+    assert "build" in names
+    assert names.index("build") * 1024 / RATE <= 14

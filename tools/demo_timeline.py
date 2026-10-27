@@ -83,7 +83,8 @@ def experts(track: Path) -> dict | None:
 
 
 def marks(path: Path, start: float, duration: float) -> list[list]:
-    """A session's marks in song time; the same mark called twice within 4 s counts once."""
+    """A session's marks in song time; the same mark called twice within 4 s counts once,
+    even with another mark between."""
 
     out: list[list] = []
     for entry in json.loads(path.read_text()):
@@ -96,7 +97,7 @@ def marks(path: Path, start: float, duration: float) -> list[list]:
             label = {"top of the climax": "Top of the climax", "groove: steady beat energy": "Groove"}.get(note)
         if label is None or not 0 <= t <= duration:
             continue
-        if out and out[-1][1] == label and t - out[-1][0] < 4:
+        if any(kept == label and t - at < 4 for at, kept in out):
             continue
         out.append([t, label])
     return out
@@ -109,6 +110,7 @@ def main() -> None:
     parser.add_argument("--classes", type=Path, help="classifier output to reuse (JSON lines)")
     parser.add_argument("--marks", type=Path, help="a recording's marks.json")
     parser.add_argument("--start", type=float, default=0.0, help="the song's start in session seconds")
+    parser.add_argument("--keep", type=Path, help="an earlier timeline whose hand-made rows (expert, marks_raw) carry over")
     args = parser.parse_args()
     samples = decode(args.track)
     classes = ([json.loads(line) for line in args.classes.read_text().splitlines()] if args.classes
@@ -121,6 +123,15 @@ def main() -> None:
         data["marks"] = marks(args.marks, args.start, duration)
     else:
         data["experts"] = experts(args.track) or {"drop": [], "build": [], "break": []}
+    if args.marks:
+        data["marks_raw"] = data.pop("marks")
+    if args.keep:
+        earlier = json.loads(args.keep.read_text())
+        for key in ("expert", "marks_raw"):
+            if key in earlier and key not in data:
+                data[key] = earlier[key]
+        if "expert" in data:
+            data.pop("experts", None)
     args.out.write_text(json.dumps(data, separators=(",", ":")))
     print(f"{len(frames)} frames, {args.out.stat().st_size // 1024} KB")
 

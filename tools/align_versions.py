@@ -54,6 +54,8 @@ def mapping(cut: np.ndarray, full: np.ndarray, window: int = 80, step: int = 20)
     a, b = _normalise(cut), _normalise(full)
     similarity = a @ b.T
     places = similarity.shape[1] - window + 1
+    if places <= 0:  # the full version is shorter than one stretch
+        return []
     starts, options = [], []
     for start in range(0, len(a) - window + 1, step):
         # The mean similarity along each diagonal: the stretch laid over every place in `full`.
@@ -84,13 +86,29 @@ def mapping(cut: np.ndarray, full: np.ndarray, window: int = 80, step: int = 20)
     return chain[::-1]
 
 
-def map_time(found: list[tuple[float, float, float]], t: float) -> float | None:
-    """`t` in the cut, in the full version; None when no matched stretch covers it."""
+def map_time(found: list[tuple[float, float, float]], t: float,
+             cut: np.ndarray | None = None, full: np.ndarray | None = None) -> float | None:
+    """`t` in the cut, in the full version; None when no matched stretch covers it.
+
+    Near a splice, stretches on both sides cover `t` with different offsets. With
+    the features given, the offset whose audio matches best right around `t`
+    (1.5 s either side) wins; otherwise the stretch centred nearest `t`."""
 
     covering = [(abs((s + e) / 2 - t), offset) for s, e, offset in found if s <= t < e]
     if not covering:
         return None
-    return t + min(covering)[1]
+    if cut is None or full is None or len({o for _, o in covering}) == 1:
+        return t + min(covering)[1]
+    a, b = _normalise(cut), _normalise(full)
+    i, reach = int(round(t * FPS)), int(1.5 * FPS)
+
+    def local(offset: float) -> float:
+        j = i + int(round(offset * FPS))
+        rows = range(max(0, i - reach), min(len(a), i + reach))
+        pairs = [(r, r + (j - i)) for r in rows if 0 <= r + (j - i) < len(b)]
+        return float(np.mean([a[r] @ b[c] for r, c in pairs])) if pairs else -1.0
+
+    return t + max({o for _, o in covering}, key=local)
 
 
 def main() -> None:
@@ -105,11 +123,12 @@ def main() -> None:
     parser.add_argument("--start", type=float, required=True, help="the cut's start in session seconds")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    found = mapping(mel_of(decode(args.cut), RATE), mel_of(decode(args.full), RATE))
+    cut_mel, full_mel = mel_of(decode(args.cut), RATE), mel_of(decode(args.full), RATE)
+    found = mapping(cut_mel, full_mel)
     print(f"{len(found)} stretches matched; offsets " + ", ".join(f"{s:.0f}s:{o:+.1f}" for s, _, o in found[::6]))
     moved = []
     for entry in json.loads(args.marks.read_text()):
-        t = map_time(found, entry["t"] - args.start)
+        t = map_time(found, entry["t"] - args.start, cut=cut_mel, full=full_mel)
         if t is not None:
             moved.append({**entry, "t": round(t, 2)})
     args.out.write_text(json.dumps(moved, indent=1))

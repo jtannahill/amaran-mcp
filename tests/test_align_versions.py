@@ -41,3 +41,16 @@ def test_a_repeated_section_maps_to_the_repeat_that_keeps_time_moving_forward():
     mapping = align_versions.mapping(cut, full, window=80, step=20)
     assert abs(align_versions.map_time(mapping, 75.0) - 125.0) < 1.0   # in A, after B
     assert abs(align_versions.map_time(mapping, 125.0) - 175.0) < 1.0  # in C
+
+
+def test_a_mark_just_after_a_splice_takes_the_far_side_offset():
+    # The cut skips 40 s at 100 s in; a mark 1 s after the splice belongs after the skip.
+    full = song(3000)
+    cut = np.concatenate([full[0:1000], full[1400:2800]])
+    found = align_versions.mapping(cut, full, window=80, step=20)
+    moved = align_versions.map_time(found, 101.0, cut=cut, full=full)
+    assert abs(moved - 141.0) < 1.0
+
+
+def test_a_full_version_shorter_than_one_stretch_matches_nothing():
+    assert align_versions.mapping(song(300), song(50), window=80, step=20) == []

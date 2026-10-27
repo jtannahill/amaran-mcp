@@ -228,7 +228,7 @@ def make_features(**fields):
     harmony = Harmony(None if root is None else "x", root, major, 0.9 if root is not None else 0.0,
                       fields.pop("balance", 0.0), fields.pop("change", False), fields.pop("lift", False))
     timbre = Timbre(fields.pop("vocal", 0.0), fields.pop("tension", 0.0), fields.pop("openness", 0.5),
-                    fields.pop("level_db", -20.0))
+                    fields.pop("level_db", -20.0), fields.pop("singing", None), fields.pop("speech", None))
     base = dict(energy=0.5, bass=0.5, is_music=True, digital_zero=False, section="groove",
                 section_seconds=10.0, release=False, bloom=False)
     base.update(fields)

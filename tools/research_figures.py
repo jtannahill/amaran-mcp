@@ -213,7 +213,10 @@ def main() -> None:
             (args.out / f"models-{suffix}.svg").write_text(models(theme, narrow))
             (args.out / f"tempo-{suffix}.svg").write_text(tempo(theme, narrow))
             (args.out / f"missyou-{suffix}.svg").write_text(missyou(theme, narrow))
-            if args.before_colours and args.after_colours:
+            if not (args.before_colours and args.after_colours):
+                if theme_name == "light" and not narrow:
+                    print("colour-*.svg left as they are (pass --before-colours and --after-colours to redraw)")
+            else:
                 before = json.loads(args.before_colours.read_text())["colours"]["ethereal"]
                 after = json.loads(args.after_colours.read_text())["colours"]["ethereal"]
                 (args.out / f"colour-{suffix}.svg").write_text(colour_strip(theme, narrow, before, after))

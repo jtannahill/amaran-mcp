@@ -244,7 +244,7 @@
     </div>
     <div class="timeline">
       <div class="clock"><b id="clocknow">0:00</b><span id="clocklen">of 0:00</span></div>
-      <span class="row-name r2">Music mode heard<small>blooms are the dots</small></span>
+      <span class="row-name r2">Music mode heard<small>every section, live; blooms are the dots</small></span>
       <span class="row-name r3" id="secondname">Experts marked</span>
       <div class="scrub" id="timeline" role="slider" tabindex="0" aria-label="Position in the track"
            aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true" aria-describedby="legend">
@@ -264,8 +264,8 @@
       <h2>How close it gets</h2>
       <p class="honest">Each track's light was computed offline by the real pipeline from a silent capture of the
         exact upload the player streams, so the light and the music stay in step. Only the colours, the section
-        calls and the marks are stored here, never audio. Music mode is far from perfect: on 402 Creative Commons
-        tracks it had not trained on, it finds about one breakdown start in ten. Every number, and what is still
+        calls and the marks are stored here, never audio. Music mode is far from perfect: scored on Creative Commons tracks held
+        out from its training (cross-validation over 402), it finds about one breakdown start in ten. Every number, and what is still
         wrong, is in <a href="https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md">the research notes</a>.</p>
     </div>
   </section>
@@ -284,17 +284,17 @@
     missyou: {
       soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (a best reading of live marks made while listening)",
       name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You", voice: "Alina Renae",
-      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end. Against that reading, music mode hears the build into the last drop from 2:44, four seconds early, and the drop at 3:24 to the second. It hears the breakdown ten seconds after the kick leaves at 2:03 and blooms twice inside it, misses the first build, hearing groove until the drop at 1:17, and holds the last drop until 4:55, where the expert hears the outro from 4:00.",
+      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end (the breakdown's start is read from the audio, where the kick leaves). Against that reading, music mode hears the build into the last drop from 2:46, two seconds early, and the drop at 3:24 to the second. It hears the breakdown nine seconds after the kick leaves at 2:03 and blooms twice inside it, holds an 8 s build inside the first drop at 1:48, misses the first build, hearing groove until the drop at 1:17, and holds the last drop until 4:55, where the expert hears the outro from 4:00.",
     },
     throughitall: {
       youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Expert reading (by Claude from the recording, not a person)",
       name: "nilsix and Clara Yates, Through It All", voice: "Clara Yates",
-      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording: where the kick is, how the energy moves and when Clara Yates sings, without music mode's section model. Against it, music mode hears the breakdown seven seconds late at 2:13 and blooms twice inside it, at 2:35 and 2:40, and drops at 2:51, twelve seconds before the reading. Early on they disagree: music mode opens out from 0:04 and again at 1:01, where the reading hears an intro and then one long groove.",
+      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording: where the kick is, how the energy moves and when Clara Yates sings, without music mode's section model. Against it, music mode hears the breakdown seven seconds late at 2:13 and blooms twice inside it, at 2:35 and 2:40, the build into the last drop seven seconds late at 2:50, and the drop three seconds early at 2:58. Both hear an early drop, music mode from 1:15 and the reading from 1:23, but music mode also opens out from 0:13, where the reading hears an intro and a build.",
     },
     persiste: {
       youtube: "nqrqepe-yMA", file: "persiste.json", second: "Expert reading (by Claude from the recording, not a person)",
       name: "Ferry Corsten, Persiste (A State of Trance 1300)",
-      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording, made without music mode's section model. This A State of Trance 1300 cut starts mid-mix at full energy. Against the reading, music mode runs about eight seconds late through the main event: the breakdown at 2:25 (reading 2:16), the build at 2:42 (2:35) and the drop at 3:13 (3:05). It blooms at 2:26 and 2:38 inside the breakdown, and once at 0:51 in a short break the reading counts as groove.",
+      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording, made without music mode's section model. This A State of Trance 1300 cut starts mid-mix at full energy. Against the reading, music mode runs about eight seconds late through the main event: the breakdown at 2:25 (reading 2:16), the build at 2:42 (2:35) and the drop at 3:13 (3:05). It blooms at 2:26 and 2:38 inside the breakdown and once at 0:51 in a short break the reading counts as groove, and it misses the short drop the reading hears at 2:07.",
     },
   };
   let track = "missyou";
@@ -397,7 +397,7 @@
     });
     // Spans under 4 s join their neighbour, and a section split by one short gap is one section.
     const shown = [];
-    for (const span of heardSpans.filter((x) => x[2] === "Breakdown" || x[2] === "Build" || x[2] === "Drop")) {
+    for (const span of heardSpans.filter((x) => x[2])) {
       const last = shown[shown.length - 1];
       if (last && last[2] === span[2] && span[0] - last[1] <= 4) last[1] = span[1];
       else if (span[1] - span[0] >= 4) shown.push(span.slice());
@@ -470,11 +470,12 @@
     }
     const extras = [WORDS[key][1]];
     if (f[2]) extras.push(`Chord: ${chordName(f[2])}.`);
-    if (f[3] >= 0.3) extras.push(TRACKS[track].voice ? `${TRACKS[track].voice} is singing.` : "A voice is singing.");
+    if (f[3] >= 0.25) extras.push(TRACKS[track].voice ? `${TRACKS[track].voice} is singing.` : "A voice is singing.");
     detail.textContent = extras.join(" ");
   }
 
   function tick() {
+    if (!data) { requestAnimationFrame(tick); return; }
     if (playing && player && player.clock && !dragging && performance.now() - anchorAt > 250) {
       const t = player.clock();
       if (t != null) { anchorPos = t; anchorAt = performance.now(); }
@@ -482,7 +483,7 @@
     if (playing) {
       const t = anchorPos + (performance.now() - anchorAt) / 1000;
       show(t);
-      if (t >= data.duration) setPlaying(false);
+      if (t >= data.duration) { setPlaying(false); if (player && player.ready) player.pause(); }
     }
     requestAnimationFrame(tick);
   }
@@ -502,7 +503,8 @@
   playBtn.addEventListener("click", () => {
     if (!data) return;
     if (player && player.ready) {
-      playing ? player.pause() : player.play();
+      if (playing) player.pause();
+      else { player.seek(position); player.play(); }
     } else {
       setPlaying(!playing);
     }
@@ -531,7 +533,7 @@
   }
   let dragging = false;
   timeline.addEventListener("pointerdown", (e) => {
-    if (!data) return;
+    if (!data || e.button !== 0) return;
     dragging = true; timeline.dataset.dragging = ""; timeline.setPointerCapture(e.pointerId);
     seek(fromPointer(e)); hover(e);
   });
@@ -560,8 +562,10 @@
     frame.src = playerSrc(id);
     $("player").replaceChildren(frame);
     const w = SC.Widget(frame);
-    const failed = setTimeout(() => { if (!p.ready) note.textContent = "The SoundCloud player did not answer, so this plays without sound."; }, 8000);
+    const failed = setTimeout(() => { if (!p.ready && !p.gone) note.textContent = "The SoundCloud player did not answer, so this plays without sound."; }, 8000);
+    p.destroy = () => { p.gone = true; clearTimeout(failed); try { w.pause(); } catch (e) { /* already gone */ } };
     w.bind(SC.Widget.Events.READY, () => {
+      if (p.gone) return;
       clearTimeout(failed); p.ready = true;
       note.textContent = "The music plays through SoundCloud's player below.";
       w.bind(SC.Widget.Events.PLAY, () => setPlaying(true));
@@ -590,12 +594,14 @@
     const p = { ready: false };
     const holder = document.createElement("div");
     $("player").classList.add("video"); $("player").replaceChildren(holder);
-    const failed = setTimeout(() => { if (!p.ready) note.textContent = "The YouTube player did not answer, so this plays without sound."; }, 8000);
+    const failed = setTimeout(() => { if (!p.ready && !p.gone) note.textContent = "The YouTube player did not answer, so this plays without sound."; }, 8000);
+    p.destroy = () => { p.gone = true; clearTimeout(failed); if (p.y) { try { p.y.destroy(); } catch (e) { /* already gone */ } } };
     youtubeReady().then((YT) => {
-      const y = new YT.Player(holder, {
+      if (p.gone) return;
+      const y = p.y = new YT.Player(holder, {
         videoId: id, width: "100%", playerVars: { rel: 0, playsinline: 1 },
         events: {
-          onReady: () => { clearTimeout(failed); p.ready = true; note.textContent = "The music plays through YouTube's player below."; },
+          onReady: () => { if (p.gone) return; clearTimeout(failed); p.ready = true; note.textContent = "The music plays through YouTube's player below."; },
           onStateChange: (e) => {
             if (e.data === YT.PlayerState.PLAYING) { position = y.getCurrentTime(); setPlaying(true); }
             if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) setPlaying(false);
@@ -604,12 +610,14 @@
       });
       Object.assign(p, { play: () => y.playVideo(), pause: () => y.pauseVideo(), seek: (s) => y.seekTo(s, true),
                          clock: () => (typeof y.getCurrentTime === "function" ? y.getCurrentTime() : null) });
-    }).catch(() => { note.textContent = "YouTube did not load, so this plays without sound."; });
+    }).catch(() => { if (!p.gone) note.textContent = "YouTube did not load, so this plays without sound."; });
     return p;
   }
 
   const cache = {};
+  let loadSeq = 0;
   function load(name) {
+    const mine = ++loadSeq;
     track = name;
     const t = TRACKS[name];
     $("trackname").textContent = t.name;
@@ -617,11 +625,14 @@
     const [secondName, secondNote] = t.second.split(" (");
     $("secondname").replaceChildren(secondName, ...(secondNote ? [Object.assign(document.createElement("small"), { textContent: secondNote.replace(/\)$/, "") })] : []));
     document.querySelectorAll(".tracks button").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.track === name)));
-    if (playing) { player && player.ready ? player.pause() : null; setPlaying(false); }
+    if (playing) setPlaying(false);
+    if (player && player.destroy) player.destroy();
+    player = null;
     playBtn.disabled = true; timeline.setAttribute("aria-disabled", "true");
     if (!cache[name]) { now.textContent = "Loading the light."; detail.textContent = "The track's colours are on their way."; }
     const got = cache[name] ? Promise.resolve(cache[name]) : fetch(t.file).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
     return got.then((d) => {
+      if (mine !== loadSeq) return;
       playBtn.disabled = false; timeline.removeAttribute("aria-disabled");
       cache[name] = d; data = d;
       timeline.setAttribute("aria-valuemax", Math.round(d.duration));
@@ -631,17 +642,25 @@
       note.textContent = "";
       $("player").classList.remove("video");
       player = t.youtube ? youtubePlayer(t.youtube) : soundcloudPlayer(t.soundcloud);
-    }).catch(() => { now.textContent = "The track's colours did not load."; detail.textContent = "Reload the page to try again."; });
+    }).catch(() => {
+      if (mine !== loadSeq) return;
+      now.textContent = "The track's colours did not load."; detail.textContent = "Reload the page to try again.";
+    });
   }
   document.querySelectorAll(".tracks button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.track !== track) load(b.dataset.track); }));
-  // A link like #visionary/t=165 opens a track at a moment.
+  // A link like #persiste/t=150 opens a track at a moment.
   const deep = location.hash.match(/^#([a-z]+)?\/?(?:t=(\d+))?$/);
   if (deep && deep[1] && !TRACKS[deep[1]]) deep[1] = null;
   if (deep && deep[1]) track = deep[1];
+  let resizing = false;
+  window.addEventListener("resize", () => {
+    if (resizing || !data) return;
+    resizing = true;
+    requestAnimationFrame(() => { resizing = false; paintBand(); buildLanes(); });
+  });
+  requestAnimationFrame(tick);
   load(track).then(() => {
-    if (deep && deep[2]) { show(Number(deep[2])); anchorPos = position; }
-    window.addEventListener("resize", () => { paintBand(); buildLanes(); });
-    requestAnimationFrame(tick);
+    if (data && deep && deep[2]) { show(Number(deep[2])); anchorPos = position; }
   });
 })();
 </script>

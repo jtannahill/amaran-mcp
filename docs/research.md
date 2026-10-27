@@ -23,7 +23,7 @@ downloaded to `~/datasets`; the owner's own recordings stay on their Mac.
 | **Decides sections with** | A 50/50 blend of **gradient-boosted trees** and a **spectrogram CNN**, trained on 402 Creative Commons EDM tracks |
 | **Section accuracy** | 0.49 balanced on unseen tracks (hand-written rules 0.36) |
 | **Runs** | numpy only at runtime, 13 ms once a second |
-| **Tempo** | 97% right on trance, 85% on house (GiantSteps); searched from 100 to 160 BPM |
+| **Tempo** | 97% right on trance; 74% to 86% on house, depending on which house tracks are counted (GiantSteps); searched from 100 to 160 BPM |
 | **Weakest spot** | Finding breakdown starts: about one in ten within a few seconds |
 
 Contents: [what it is for](#what-music-mode-is-for) ·
@@ -108,7 +108,7 @@ each one shaped music mode.
 
 | The music | What it means for music mode |
 |---|---|
-| **138 BPM, four to the floor.** A beat is 0.43 s, a bar 1.74 s, an 8-bar phrase 14 s, a 32-bar breakdown nearly a minute | The tempo tracker searches 100 to 150 BPM (no half-time 69 BPM confusion) and every timing rule counts in bars at the tempo it hears: a breakdown starts after 4 bars without the kick, stays pale for its first 2 bars, and a build needs 2 bars of rising tension. The model's 16 s window holds about one 8-bar phrase |
+| **138 BPM, four to the floor.** A beat is 0.43 s, a bar 1.74 s, an 8-bar phrase 14 s, a 32-bar breakdown nearly a minute | The tempo tracker searches 100 to 160 BPM (no half-time 69 BPM confusion) and every timing rule counts in bars at the tempo it hears: a breakdown starts after 4 bars without the kick, stays pale for its first 2 bars, and a build needs 2 bars of rising tension. The model's 16 s window holds about one 8-bar phrase |
 | **A rolling, offbeat bassline** between the kicks, sidechained to them | The bass never really stops, so "is the kick in" cannot be judged by bass level. It is judged by beat strength at the remembered tempo, and a model sure of a build or a drop can end an intro the kick test missed |
 | **The breakdown is the point.** The kick goes, pads, piano and delay tails swell, and the vocal arrives, often a female voice drenched in reverb | Breakdowns get their own colour logic: pale first, then the chords. Blending in the CNN was chosen for breakdowns over builds. A reverb-washed vocal reads only 0.30 to 0.35 on Apple's singing class, lower than a dry voice, so the vocal boost needs scaling to it |
 | **Euphoria is harmonic.** Minor-key progressions such as i, VII, VI, VII (the owner's ASOT breakdown is B flat minor, A flat, G flat, A flat) lift onto major chords at the emotional peaks | The bloom is tied to that lift, minor onto major and nothing else. Major onto major (A flat to G flat) would bloom on every chord change |
@@ -227,7 +227,7 @@ carry the same readings as live ones.
 |---|---|
 | Plain speech | 0.96 speech |
 | A synthetic singing voice | up to 0.40 singing |
-| A sung trance vocal entering a breakdown (owner's session) | about 0.30 to 0.35 singing |
+| A sung trance vocal entering a breakdown (owner's session) | about 0.30 to 0.35 singing, rising to 0.42 at the 90th percentile over a whole vocal track |
 
 Real vocals read far lower than the 0 to 1 scale suggests. Across three
 captured vocal trance tracks:
@@ -242,7 +242,12 @@ So a real vocal added only a third of its swell to a bloom, and a quiet line
 under 0.3 ended the bloom early. The renderer now rescales the reading before
 using it: 0.08 and below is no voice, 0.40 a full one. A sung 0.38 now gives
 almost the whole swell and a line at 0.22 keeps the bloom alive. The section
-model keeps the raw reading, the scale it was trained on.
+model keeps the raw reading, the scale it was trained on, and the fallback
+estimate used when the classifier is unavailable keeps its own scale. The
+margin is thin at the bottom: the instrumental reaches 0.23 at its highest,
+which the rescale reads as half a voice, so a bloom in an instrumental
+breakdown can still be lifted a little. The page says a voice is singing only
+above 0.25, which the instrumental never reaches.
 
 ## Sections: the trained model
 
@@ -331,15 +336,25 @@ not see:
   intro; a model calling groove or breakdown still leaves it to the kick.
 - **Flicker.** The minimum section length only applied to sections the model
   chose, so a fast release into a drop could be sent back to the build a
-  second later. Now every section lasts at least 8 s, whoever entered it.
+  second later. Now every section lasts at least 8 s, whoever entered it,
+  and only an intro or silence can end sooner.
 
 | On 36 tracks | Before | After |
 |---|---|---|
 | Tracks stuck in intro for over half their length | 2 | 0 |
 | Tracks out of the intro within a minute | 32 | 36 |
-| Flickers (one second in another section, then back) | 8 | 1 |
-| Seconds matching the experts | 75% | 74% |
+| Flickers (one second in another section, then back) | 8 | 0 |
+| Seconds matching the experts | 75% | 72% |
 | Tracks with at least one bloom | 17 | 17 |
+
+A first fix let a sure model end an intro and made the decoder's minimum stay
+apply to sections other paths entered. It left a hole the page's own tracks
+showed: when the model went unsure two seconds into a build, the hand-written
+rules, hearing the kick, returned it to the drop. Now the rules wait out a
+section's minimum too, and the decoder has a real intro state that only a
+build or a drop can end. Agreement drops slightly because sections now hold
+their 8 s even where an expert's label changes sooner. To rerun:
+`uv run python tools/live_check.py`.
 
 ## The first marked session: Miss You
 
@@ -364,7 +379,8 @@ How the comparison was made, so both rows describe the same audio:
    stretch of it was matched to the full version by spectrogram similarity,
    keeping only matches that move forward in time (`tools/align_versions.py`).
    The cut starts 6.9 s into the full version and skips about 14 s near the
-   first minute and 3 s later on. 20 of the 22 marks carried over; the other
+   first minute and 3 s later on. 20 of the 22 marks carried over (18 once the
+   same moment called twice within 4 s counts once); the other
    two fall in the DJ's blend at the ends.
 3. **The light.** The whole pipeline ran on the capture
    (`tools/demo_timeline.py`): Apple's classifier, the analyser with the
@@ -382,14 +398,14 @@ where the kick leaves (beat strength falls from about 0.8 to under 0.3).
 | Human expert, best reading | Music mode heard | |
 |---|---|---|
 | Build 0:48 to 1:15 | Groove | Missed |
-| Drop 1:15 to 2:03 | Drop from 1:17 | Agrees, 2 s late |
-| Breakdown 2:03 to 2:48 | Breakdown from 2:13, blooms at 2:23 and 2:37 | 10 s late |
-| Build 2:48 to 3:24 | Build from 2:44 | Agrees, 4 s early |
+| Drop 1:15 to 2:03 | Drop from 1:17, with an 8 s build at 1:48 | Agrees, 2 s late |
+| Breakdown 2:03 to 2:48 | Breakdown from 2:12, blooms at 2:23 and 2:37 | 9 s late |
+| Build 2:48 to 3:24 | Build from 2:46 | Agrees, 2 s early |
 | Drop 3:24 to 4:00 | Drop at 3:24 | Agrees, to the second |
 | Outro from 4:00 | Drop until 4:55 | Late |
 
 Read this way, music mode agrees on the build into the last drop and both
-drops, hears the breakdown ten seconds late, misses the first build, and holds
+drops, hears the breakdown nine seconds late, misses the first build, and holds
 the last drop well past the outro. The owner also used words the
 model has no class for, "crescendo" and "top of the climax", which suggests
 the drop needs a rising part and a peak. This is the first session for the
@@ -418,8 +434,8 @@ drop the outro. Every section lasts at least 8 s.
 
 Checked against the human expert's reading of Miss You, it finds the same
 breakdown (2:04 against 2:03), the build into the last drop 10 s late, the last
-drop 14 s late and the outro 7 s late; its first minute is wrong (it hears a
-drop at 0:57 where the human hears a build until 1:15). On the page these
+drop 12 s late and the outro 9 s late; its first minute is wrong (it hears a
+drop from 0:38 where the human hears a build until 1:15). On the page these
 rows are labelled as Claude's reading, never as a person's.
 
 ## Colour: trance wants saturation
@@ -439,11 +455,11 @@ breakdown opens at 40 before its chords take over.
   <img alt="Two colour bands for the same track: before the change, greys and pale lilacs; after it, saturated blues, violets, orchids and a warm breakdown." src="figures/colour-wide-light.svg">
 </picture>
 
-| Default mood (`ethereal`), two tracks | Before | After |
+| Default mood (`ethereal`) | Before (two Creative Commons tracks) | After (same tracks) | The page's three tracks now |
 |---|---|---|
-| Average saturation | 34 to 39 | 63 to 67 |
-| Share of time below 30 | 31% to 47% | 0% |
-| Breakdown average | 24 to 34 | 53 to 58 |
+| Average saturation | 34 to 39 | 63 to 67 | 69 to 72 |
+| Share of time below 30 | 31% to 47% | 0% | 0% |
+| Breakdown average | 24 to 34 | 53 to 58 | 52 to 58 |
 
 Studio lighting is the opposite case: interviews want white light, so colour
 belongs to music mode and to background accents.
@@ -488,7 +504,9 @@ a false release at 1:48 disappeared with these changes.
 
 A State of Trance now plays hard trance at 150 BPM and beyond (episode 1300
 included), so the search was widened from 100 to 150 BPM to 100 to 160 BPM.
-On all 664 previews:
+On all 664 previews (the genre groups here are GiantSteps' own; the sweep
+above grouped house variants together, which is why its house count is
+larger):
 
 | GiantSteps, Accuracy 1 | Search to 150 | Search to 160 |
 |---|---|---|
@@ -533,13 +551,19 @@ colour band and the music stay in step because the light follows the player's
 own clock. Only colours, section calls and marks are in the repository, never
 audio.
 
+Each track was captured silently from the upload the page plays, with the
+audio helper tapping only Chrome and muting it (`tools/capture_app.py`). The
+song was then located twice over: from the player's own state log (when it
+started playing and when it ended) and from where the captured audio ends,
+less the upload's length. On the YouTube tracks, which open with an ad, the
+two agreed within 0.05 s. The first two to four seconds of every timeline read
+as silence because the analyser is warming up, not because the audio is quiet.
+
 ## Open questions
 
 - **Breakdown starts.** The blend finds about one in ten; the owner's marked
   sessions are the planned fix, trained into a local model that stays on
   their Mac.
-- **Vocal scale.** Real sung vocals read 0.30 to 0.35 singing; the bloom's
-  vocal boost should be scaled to that.
 - **Major or minor.** Not reliably heard from chroma in dense mixes.
 - **The body as well as the music.** Heart rate (Apple Watch) and strain or
   recovery (WHOOP) to modulate the light alongside the music. Not started.

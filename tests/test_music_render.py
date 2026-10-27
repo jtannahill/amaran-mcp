@@ -201,8 +201,8 @@ def test_a_real_sung_vocal_gets_nearly_the_full_bloom():
     def peak(vocal):
         r = Renderer(MOODS["ethereal"])
         run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.5), 8)
-        r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=vocal), 1 / 8)
-        return max(o.brightness for o in run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=vocal), 6))
+        r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=vocal, singing=vocal), 1 / 8)
+        return max(o.brightness for o in run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=vocal, singing=vocal), 6))
     assert peak(1.0) - peak(0.38) <= 1.0
 
 
@@ -210,6 +210,16 @@ def test_a_quiet_sung_phrase_keeps_the_bloom():
     # A real vocal dipping to 0.22 between lines is still a vocal; the bloom holds.
     r = Renderer(MOODS["ethereal"])
     base = run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.5), 8)[-1].brightness
-    r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=0.38), 1 / 8)
-    held = run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=0.22), 8)[-1].brightness
+    r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=0.38, singing=0.38), 1 / 8)
+    held = run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=0.22, singing=0.22), 8)[-1].brightness
     assert held >= base + 5
+
+
+def test_the_fallback_vocal_estimate_is_not_rescaled():
+    # Without Apple's classifier the vocal comes from a pitch-movement estimate on
+    # its own 0 to 1 scale (0.3 to 0.9 in grooves); rescaling it would pin it full.
+    r = Renderer(MOODS["ethereal"])
+    base = run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.5), 8)[-1].brightness
+    r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=0.6), 1 / 8)
+    after = run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=0.22), 8)[-1].brightness
+    assert after <= base + 3  # 0.22 on the estimate's own scale is no voice: the bloom eases back

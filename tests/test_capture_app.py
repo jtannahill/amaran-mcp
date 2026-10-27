@@ -48,3 +48,16 @@ def test_a_capture_louder_than_full_scale_is_scaled_down_not_clipped(tmp_path):
     with wave.open(str(path)) as w:
         data = np.frombuffer(w.readframes(3), "<i2")
     assert list(data) == [0, 16383, -32767]
+
+
+def test_a_silent_capture_is_refused(tmp_path):
+    # Chrome can restart its audio process mid-capture; the tap then hears nothing.
+    import pytest
+    with pytest.raises(ValueError, match="silent"):
+        capture_app.write_wav(tmp_path / "x.wav", 1000, np.zeros(500, dtype=np.float32))
+
+
+def test_a_helper_that_found_nothing_to_tap_says_so():
+    import pytest
+    with pytest.raises(ValueError, match="helper stopped before sending audio"):
+        capture_app.read_stream(io.BytesIO(b""), seconds=1.0)

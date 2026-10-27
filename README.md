@@ -1,8 +1,17 @@
 # amaran-mcp
 
-Control an amaran light from a Mac by asking Claude, and let it follow the
-music the way a lighting designer would: by the shape of the track, not the
-beat.
+A Model Context Protocol server and CLI through which Claude drives an amaran
+light from a Mac, built for two uses of equal weight.
+
+| Studio lighting from a prompt | Music mode |
+|---|---|
+| Describe the shot (a talking head, a corporate interview) or show Claude a photo of the set; it sets colour temperature, tint and level, and a saved scene brings the look back. | The light follows what the Mac plays by the structure of the track rather than its beat: it drifts through the groove, pales when the kick drops out, blooms when a breakdown's chords lift, and opens out at the drop. |
+
+Underneath, Apple's on-device sound classifier separates singing from speech,
+and a 50/50 blend of gradient-boosted trees and a log-mel CNN, trained on 402
+expert-labelled Creative Commons EDM tracks, names the section once a second
+in 13 ms of numpy: balanced accuracy 0.49 on held-out tracks, against 0.36 for
+hand-written rules. Everything runs on the Mac.
 
 <a href="https://jtannahill.github.io/amaran-mcp/">
 <picture>
@@ -155,7 +164,7 @@ Both learned from [SSME](https://osf.io/eydxk/): 402 Creative Commons EDM
 tracks with drops, builds and breaks marked by experts. Training uses
 scikit-learn and PyTorch; the shipped model is plain numpy arrays
 (`src/amaran_mcp/music/sections.npz`), so music mode needs neither. Scored on
-tracks each model had not seen:
+tracks held out from each model's training (five-fold cross-validation):
 
 | | Sections | Breakdowns | Builds | Drops |
 |---|---|---|---|---|
@@ -165,7 +174,7 @@ tracks each model had not seen:
 | **Blend (shipped)** | **0.49** | 0.09 | 0.07 | **0.20** |
 
 Sections is balanced accuracy, the share of seconds called right averaged
-over the five sections; the others are F scores for finding a start within a
+over the four sections the model names; the others are F scores for finding a start within a
 few seconds. Rules are the hand-written logic the model replaced.
 Trance breakdowns are the weakest spot, which is why it also learns from your
 own listening (below). The full research, every measurement and how to

@@ -27,35 +27,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 FPS = 10
-KERNEL = 80  # frames each side: 8 s
-MIN_GAP = 120  # frames between changes: 12 s
-
-
-def novelty(mel: np.ndarray) -> np.ndarray:
-    z = (mel - mel.mean(axis=0)) / (mel.std(axis=0) + 1e-6)
-    z /= np.linalg.norm(z, axis=1, keepdims=True) + 1e-6
-    s = z @ z.T
-    k = KERNEL
-    sign = np.ones((2 * k, 2 * k))
-    sign[:k, k:] = sign[k:, :k] = -1
-    taper = np.outer(np.hanning(2 * k), np.hanning(2 * k))
-    kernel = sign * taper
-    n = len(z)
-    out = np.zeros(n)
-    for i in range(k, n - k):
-        out[i] = float(np.sum(s[i - k : i + k, i - k : i + k] * kernel))
-    return out
-
-
-def peaks(curve: np.ndarray, gap: int, floor: float) -> list[int]:
-    order = np.argsort(curve)[::-1]
-    picked: list[int] = []
-    for i in order:
-        if curve[i] < floor:
-            break
-        if all(abs(i - j) >= gap for j in picked):
-            picked.append(int(i))
-    return sorted(picked)
 
 
 def _runs(flags: np.ndarray, shortest: int) -> list[list]:
@@ -88,11 +59,6 @@ def _runs(flags: np.ndarray, shortest: int) -> list[list]:
     return runs
 
 
-def _snap(t: int, candidates: list[int], reach: int) -> int:
-    near = [c for c in candidates if abs(c - t) <= reach]
-    return min(near, key=lambda c: abs(c - t)) if near else t
-
-
 def beat_strength(samples: np.ndarray, rate: int) -> np.ndarray:
     """How strongly the low band (40 to 150 Hz) pulses at a dance tempo (100 to 160 BPM),
     over 4 s windows, at 10 frames a second: 0 for no kick, near 1 for a steady one."""
@@ -121,8 +87,10 @@ def beat_strength(samples: np.ndarray, rate: int) -> np.ndarray:
 
 def reading(mel: np.ndarray, beat: np.ndarray, singing: np.ndarray) -> dict:
     n = len(mel)
-    beat = np.resize(beat, n)
-    energy = np.convolve(mel.mean(axis=1), np.ones(80) / 80, mode="same")  # 8 s
+    beat = np.pad(beat[:n], (0, max(0, n - len(beat))))
+    # Log-mel energy, smoothed over 8 s. Thresholds are fractions of the track's own
+    # energy range, so they hold however the log values fall (negative near silence).
+    energy = np.convolve(mel.mean(axis=1), np.ones(80) / 80, mode="same")
     span_e = np.percentile(energy, 95) - np.percentile(energy, 5)
     audible = energy > np.percentile(energy, 5) + 0.25 * span_e
     kick = (np.convolve(beat, np.ones(20) / 20, mode="same") >= 0.35) & audible
@@ -139,12 +107,12 @@ def reading(mel: np.ndarray, beat: np.ndarray, singing: np.ndarray) -> dict:
         seg = energy[a:b]
         if after_break:
             # The kick is back: a build while the energy still climbs, then the drop.
-            peak = int(np.argmax(seg >= 0.97 * seg.max()))
+            peak = int(np.argmax(seg >= seg.max() - 0.03 * span_e))
             if peak > 80:
                 sections.append([a, a + peak, "Build"])
                 a = a + peak
                 seg = energy[a:b]
-        for c, d, hot in _runs(seg >= 0.9 * top, shortest=80):
+        for c, d, hot in _runs(seg >= top - 0.1 * span_e, shortest=80):
             sections.append([a + c, a + d, "Drop" if hot else "Groove"])
         after_break = False
     if sections and sections[0][2] in ("Quiet", "Groove"):
