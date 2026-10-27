@@ -177,6 +177,13 @@
   .player { min-height: 20px; }
   .player iframe { width: 100%; max-width: 360px; height: 20px; border: 0; display: block; }
   .player.video iframe { height: auto; aspect-ratio: 16 / 9; border-radius: 8px; }
+  .player.apple iframe { height: 150px; border-radius: 12px; background: transparent; }
+  .connect {
+    font: 600 15px/1 "Hanken Grotesk", sans-serif; color: var(--wall); background: var(--ink); border: 0;
+    border-radius: 999px; padding: 12px 18px; min-height: 44px; margin: 0 0 14px; cursor: pointer;
+    transition: transform 120ms var(--ease-out);
+  }
+  .connect:active { transform: scale(0.97); }
   /* Each moment jumps the track there; the row the playhead is in lights up. */
   .moments { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
   .moments caption { text-align: left; font: 500 14px/1.25 "Hanken Grotesk", sans-serif; color: var(--ink); margin: 0 0 6px; }
@@ -254,6 +261,7 @@
       <button type="button" data-track="missyou" aria-pressed="true">Miss You</button>
       <button type="button" data-track="throughitall" aria-pressed="false">Through It All</button>
       <button type="button" data-track="persiste" aria-pressed="false">Persiste</button>
+      <button type="button" data-track="shadows" aria-pressed="false">Shadows</button>
     </div>
     <div class="track-head">
       <h2 id="trackname" aria-live="polite">Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You</h2>
@@ -305,7 +313,7 @@
   GrokBot and any other MCP client. Tracks play from their official uploads:
   Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You, on Craig Connelly's SoundCloud; nilsix and Clara Yates,
   Through It All, on Black Hole Recordings' YouTube; Ferry Corsten, Persiste (A State of Trance 1300), on Ferry
-  Corsten's YouTube. Not affiliated with Aputure, amaran or the artists.
+  Corsten's YouTube; Elite Electronic, Shadows (Find Your Harmony 512), on Apple Music. Not affiliated with Aputure, amaran or the artists.
 </footer>
 
 <script src="https://w.soundcloud.com/player/api.js"></script>
@@ -349,6 +357,21 @@
         [137, "Breakdown", "2:16", "2:25, blooms at 2:26 and 2:38", "9 s late"],
         [156, "Build", "2:35", "2:42", "7 s late"],
         [186, "Drop", "3:05", "3:13", "8 s late"],
+      ],
+    },
+    shadows: {
+      applemusic: "6816151874", file: "shadows.json", second: "Expert reading (by Claude from the recording, not a person)",
+      embed: "https://embed.music.apple.com/us/album/shadows-fyh512/6816151779?i=6816151874",
+      name: "Elite Electronic, Shadows (Find Your Harmony 512)", who: "Claude's reading",
+      about: "No person has marked this one yet. The second row is Claude's reading of the recording, made without music mode's section model. This is the cut from Andrew Rayel's Find Your Harmony episode 512.",
+      moments: [
+        [17, "Build", "0:16", "0:31", "15 s late"],
+        [39, "First drop", "0:46", "0:39", "7 s early"],
+        [59, "Breakdown", "0:58", "1:07, blooms at 1:09 and 1:21", "9 s late"],
+        [92, "Build", "1:31", "1:32", "1 s late"],
+        [108, "Drop", "1:47", "Holds the build to 2:18", "31 s late"],
+        [136, "Groove", "2:15 to 2:46", "A drop from 2:18", "Missed"],
+        [195, "Outro", "3:14", "A drop again, 3:19 to 3:30", "Missed"],
       ],
     },
   };
@@ -685,6 +708,71 @@
     }).catch(() => { if (!p.gone) note.textContent = "YouTube did not load, so this plays without sound."; });
     return p;
   }
+  // Apple Music: MusicKit plays the full song to anyone signed in to Apple Music and reports its
+  // clock. Apple's embed beside it plays on its own (no clock), for anyone who does not connect.
+  const APPLE_MUSIC_TOKEN = "";  // tools/musickit_token.py: public by design, limited to this site
+  let musicKitApi = null;
+  function musicKitReady() {
+    if (!musicKitApi) musicKitApi = new Promise((resolve, reject) => {
+      if (!APPLE_MUSIC_TOKEN) { reject(new Error("no developer token")); return; }
+      document.addEventListener("musickitloaded", () => {
+        Promise.resolve(MusicKit.configure({ developerToken: APPLE_MUSIC_TOKEN, app: { name: "Play a breakdown", build: "1" } }))
+          .then(resolve, reject);
+      }, { once: true });
+      const tag = document.createElement("script");
+      tag.src = "https://js-cdn.music.apple.com/musickit/v3/musickit.js";
+      tag.onerror = reject;
+      document.head.appendChild(tag);
+    });
+    return musicKitApi;
+  }
+  function applePlayer(id, embedSrc) {
+    const p = { ready: false };
+    const box = $("player");
+    const embed = Object.assign(document.createElement("iframe"), { title: "The track on Apple Music", src: embedSrc });
+    embed.allow = "autoplay *; encrypted-media *;";
+    embed.setAttribute("sandbox", "allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation");
+    const connect = Object.assign(document.createElement("button"), { type: "button", className: "connect", textContent: "Connect Apple Music" });
+    box.classList.add("apple"); box.replaceChildren(embed);
+    note.textContent = "This one plays from Apple Music.";
+    let want = 0, mk = null;
+    const onState = () => {
+      const S = MusicKit.PlaybackStates;
+      if (mk.playbackState === S.playing) { position = mk.currentPlaybackTime; setPlaying(true); }
+      if ([S.paused, S.stopped, S.ended, S.completed].includes(mk.playbackState)) setPlaying(false);
+    };
+    const wire = async () => {
+      await mk.setQueue({ song: id });
+      if (p.gone) return;
+      mk.addEventListener("playbackStateDidChange", onState);
+      p.ready = true;
+      box.replaceChildren();  // MusicKit plays it now; the embed would be a second, unsynced copy
+      note.textContent = "The music plays through your Apple Music, in step with the light.";
+    };
+    musicKitReady().then((instance) => {
+      if (p.gone) return;
+      mk = instance;
+      Object.assign(p, {
+        play: async () => { await mk.play(); if (Math.abs(mk.currentPlaybackTime - want) > 0.5) await mk.seekToTime(want); },
+        pause: () => mk.pause(),
+        seek: (s) => { want = s; if (mk.playbackState === MusicKit.PlaybackStates.playing) mk.seekToTime(s); },
+        clock: () => mk.currentPlaybackTime,
+      });
+      if (mk.isAuthorized) return wire();
+      note.textContent = "Connect Apple Music to hear the full song in step with the light. Apple's player plays on its own.";
+      connect.addEventListener("click", () => mk.authorize().then(wire).catch(() => {
+        if (!p.gone) note.textContent = "Apple Music did not connect. Apple's player plays on its own.";
+      }));
+      box.prepend(connect);
+    }).catch(() => {
+      if (!p.gone) note.textContent = "Apple's player plays on its own here, so the light follows the page's clock, not the music.";
+    });
+    p.destroy = () => {
+      p.gone = true;
+      if (mk) { mk.removeEventListener("playbackStateDidChange", onState); if (p.ready) mk.pause(); }
+    };
+    return p;
+  }
 
   const cache = {};
   let loadSeq = 0;
@@ -724,8 +812,9 @@
       paintBand(); buildLanes(); show(0);
       lastSection = null; now.textContent = "Press play."; detail.textContent = "The light waits in the dark.";
       note.textContent = "";
-      $("player").classList.remove("video");
-      player = t.youtube ? youtubePlayer(t.youtube) : soundcloudPlayer(t.soundcloud);
+      $("player").classList.remove("video", "apple");
+      player = t.youtube ? youtubePlayer(t.youtube) : t.applemusic ? applePlayer(t.applemusic, t.embed)
+        : soundcloudPlayer(t.soundcloud);
     }).catch(() => {
       if (mine !== loadSeq) return;
       now.textContent = "The track's colours did not load."; detail.textContent = "Reload the page to try again.";
