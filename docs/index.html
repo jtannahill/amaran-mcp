@@ -41,19 +41,19 @@
 
   .room {
     display: grid;
-    grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.6fr);
-    gap: clamp(32px, 6vw, 96px);
+    grid-template-columns: 10rem minmax(0, 1fr);
+    gap: 24px;
     align-items: center;
     max-width: 1160px;
     margin: 0 auto;
     padding: clamp(40px, 7vh, 88px) clamp(16px, 4vw, 48px) 40px;
     min-height: min(760px, 82svh);
   }
-  .stand { display: flex; justify-content: center; }
+  .stand { display: flex; justify-content: flex-start; }
   .tube {
-    width: 34px;
-    height: min(520px, 62svh);
-    border-radius: 17px;
+    width: 44px;
+    height: min(600px, 70svh);
+    border-radius: 22px;
     background: var(--tube);
   }
   h1 {
@@ -64,7 +64,7 @@
   }
   .lede { max-width: 34em; color: var(--ink-soft); margin: 0 0 28px; }
   .now {
-    font: 300 clamp(24px, 2.6vw, 32px)/1.2 "Unbounded", "Hanken Grotesk", system-ui, sans-serif;
+    font: 300 28px/1.2 "Unbounded", "Hanken Grotesk", system-ui, sans-serif;
     letter-spacing: -0.02em;
     margin: 0 0 6px;
     min-height: 1.2em;
@@ -84,12 +84,12 @@
     min-width: 112px;
     transition: background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
   }
-  .play:hover { background: #f7f8fc; }
+  .play:hover { background: var(--focus); }
   .play:active { transform: scale(0.97); }
   .play:disabled { opacity: 0.5; cursor: default; transform: none; }
   .moods { display: flex; gap: 6px; }
   .moods button {
-    font: 500 16px/1 "Hanken Grotesk", sans-serif;
+    font: 500 17px/1 "Hanken Grotesk", sans-serif;
     color: var(--ink-soft);
     background: transparent;
     border: 0;
@@ -101,8 +101,8 @@
   }
   .moods button:hover { color: var(--ink); }
   .moods button:active, .tracks button:active { transform: scale(0.97); }
-  .moods button[aria-pressed="true"] { color: var(--wall); background: var(--ink-soft); }
-  .sound-note { color: var(--ink-soft); font-size: 15px; margin: 14px 0 0; min-height: 1.5em; }
+  .moods button[aria-pressed="true"] { color: var(--ink); background: var(--lane); }
+  .sound-note { color: var(--ink-soft); font-size: 14px; margin: 14px 0 0; min-height: 1.5em; }
 
   .track {
     max-width: 1160px;
@@ -111,14 +111,14 @@
   }
   .tracks { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 24px -16px; }
   .tracks button {
-    font: 500 16px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft); background: transparent;
+    font: 500 17px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft); background: transparent;
     border: 0; border-radius: 999px; padding: 11px 16px; min-height: 44px; cursor: pointer;
     transition: color 150ms var(--ease-out), background-color 150ms var(--ease-out), transform 120ms var(--ease-out);
   }
   .tracks button:hover { color: var(--ink); }
-  .tracks button[aria-pressed="true"] { color: var(--wall); background: var(--ink-soft); }
+  .tracks button[aria-pressed="true"] { color: var(--ink); background: var(--lane); }
   .track-head { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; margin: 0 0 16px; }
-  .track-head h2 { font: 500 17px/1.3 "Hanken Grotesk", sans-serif; margin: 0; }
+  .track-head h2 { font: 300 28px/1.2 "Unbounded", "Hanken Grotesk", sans-serif; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
   .track-head .clock-small { display: none; color: var(--ink-soft); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Names in a left gutter; every row draws its own piece of the playhead, so it never crosses text. */
@@ -127,14 +127,14 @@
     grid-template-rows: 64px minmax(32px, auto) minmax(32px, auto) auto auto auto;
     column-gap: 24px; row-gap: 14px;
   }
-  .clock { grid-area: 1 / 1; align-self: center; font: 600 22px/1.1 "Hanken Grotesk", sans-serif; font-variant-numeric: tabular-nums; }
+  .clock { grid-area: 1 / 1; align-self: center; font: 300 28px/1.1 "Unbounded", "Hanken Grotesk", sans-serif; font-variant-numeric: tabular-nums; }
   .clock span { display: block; font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
   .row-name { grid-column: 1; font: 500 14px/1.25 "Hanken Grotesk", sans-serif; color: var(--ink); }
-  .row-name small { display: block; font-size: 13px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
+  .row-name small { display: block; font-size: 14px; font-weight: 400; color: var(--ink-soft); margin-top: 2px; }
   .r2 { grid-row: 2; } .r3 { grid-row: 3; }
   .scrub {
     grid-column: 2; grid-row: 1 / 4; display: grid; grid-template-rows: subgrid; row-gap: 14px;
-    --pos: 0%; cursor: pointer; touch-action: none; border-radius: 10px;
+    --pos: 0%; cursor: pointer; touch-action: pan-y; border-radius: 10px;
   }
   .scrub[aria-disabled="true"] { cursor: default; }
   .scrub[data-dragging] { cursor: grabbing; user-select: none; }
@@ -144,15 +144,17 @@
     content: ""; position: absolute; left: var(--pos); width: 2px; margin-left: -1px;
     background: var(--ink); border-radius: 1px; pointer-events: none;
   }
-  .scrub:focus-visible .row::after, .scrub[data-dragging] .row::after { width: 3px; margin-left: -1.5px; }
-  .band-row::after { top: -4px; bottom: -4px; }
-  .lane-row::after { top: -2px; height: 16px; }
+  .scrub:focus-visible .row::after, .scrub[data-dragging] .row::after { width: 4px; margin-left: -2px; }
+  /* The playhead lives in the band only; in the lanes a line would read as a mark. */
+  .band-row { touch-action: none; }
+  .band-row::after { top: -6px; bottom: -6px; width: 3px; margin-left: -1.5px; }
+  .lane-row::after { content: none; }
   .band { display: block; width: 100%; height: 64px; border-radius: 8px; background: var(--lane); }
   .lane-row i { position: absolute; top: 0; height: 12px; border-radius: 3px; background: var(--lane-strong); }
   .lane-row i.tick { width: 2px; border-radius: 1px; background: var(--lane-tick); }
-  .lane-row i.bloom { top: -4px; width: 2px; height: 20px; border-radius: 1px; background: var(--ink); }
+  .lane-row i.bloom { top: -9px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--ink); }
   .lane-row b {
-    position: absolute; top: 18px; font: 500 13px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft);
+    position: absolute; top: 18px; font: 500 14px/1 "Hanken Grotesk", sans-serif; color: var(--ink-soft);
     white-space: nowrap; pointer-events: none;
   }
   .ghost {
@@ -167,23 +169,26 @@
   @media (hover: hover) { .scrub:hover .ghost, .scrub:hover .tip { display: block; } }
   .scrub[data-dragging] .ghost { display: none; }
   .scrub[data-dragging] .tip { display: block; }
-  .readout, .legend, .player { grid-column: 2; margin: 0; }
-  .readout { font-size: 15px; color: var(--ink); min-height: 1.55em; }
+  .readout, .legend, .listen { grid-column: 2; margin: 0; }
+  .readout { font-size: 17px; color: var(--ink); min-height: 1.55em; }
   .legend { font-size: 14px; color: var(--ink-soft); }
-  .player { min-height: 20px; margin-top: 10px; }
-  .player iframe { width: 100%; height: 20px; border: 0; display: block; }
-  .player.video iframe { height: auto; aspect-ratio: 16 / 9; max-width: 360px; border-radius: 8px; }
+  /* The player and this track's note share one row: a 360px slot, the words beside it. */
+  .listen { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 40px; align-items: start; margin-top: 10px; }
+  .player { min-height: 20px; }
+  .player iframe { width: 100%; max-width: 360px; height: 20px; border: 0; display: block; }
+  .player.video iframe { height: auto; aspect-ratio: 16 / 9; border-radius: 8px; }
 
-  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 48px; }
+  .notes { margin-top: 64px; max-width: 44em; }
+  .notes h2 { font: 300 28px/1.2 "Unbounded", "Hanken Grotesk", sans-serif; letter-spacing: -0.02em; margin: 0 0 12px; }
   .honest { max-width: 36em; color: var(--ink-soft); margin: 0; }
-  footer { max-width: 1160px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 48px) 56px; color: var(--ink-soft); font-size: 15px; }
+  footer { max-width: 1160px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 48px) 56px; color: var(--ink-soft); font-size: 14px; }
 
   @media (max-width: 720px) {
     body { font-size: 16px; }
     .room { grid-template-columns: 16px minmax(0, 1fr); gap: 20px; min-height: 0; padding-top: 32px; align-items: stretch; }
     .stand { justify-content: stretch; }
     .tube { width: 16px; height: auto; min-height: 100%; border-radius: 8px; }
-    .tracks { margin-left: -12px; } .tracks button { padding: 10px 12px; }
+    .tracks { margin-left: 0; } .tracks button { padding: 10px 12px; }
     .track-head .clock-small { display: inline; }
     .timeline { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px auto 32px auto 32px auto auto auto; row-gap: 8px; }
     .clock { display: none; }
@@ -192,9 +197,14 @@
     .scrub { grid-column: 1; grid-row: 1 / 6; row-gap: 8px; }
     .scrub > :nth-child(1) { grid-row: 1; } .scrub > :nth-child(2) { grid-row: 3; } .scrub > :nth-child(3) { grid-row: 5; }
     .band { height: 48px; }
-    .lane-row b { font-size: 12px; }
-    .readout, .legend, .player { grid-column: 1; }
-    .notes { grid-template-columns: 1fr; gap: 24px; }
+    .lane-row b { font-size: 13px; }
+    .readout, .legend, .listen { grid-column: 1; }
+    .listen { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .track-head h2, .notes h2, .now { font-size: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .play, .moods button, .tracks button { transition: none; }
+    .play:active, .moods button:active, .tracks button:active { transform: none; }
   }
 </style>
 </head>
@@ -204,10 +214,10 @@
     <div class="stand"><div class="tube" id="tube" role="img" aria-label="The light tube, showing music mode's colour"></div></div>
     <div>
       <h1>Play a breakdown</h1>
-      <p class="lede">This is the colour an amaran light takes under
-        <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp</a>'s music mode. Every second
-        was computed by the real analysis and renderer, then saved. The page's background stands in for the
-        wall behind the light.</p>
+      <p class="lede">Most music-reactive lights flash on every beat. This one follows the shape of a trance
+        track instead: it drifts through the groove, holds back in the breakdown and blooms when the chords lift.
+        Press play to see exactly what <a href="https://github.com/jtannahill/amaran-mcp">amaran-mcp</a>'s
+        music mode would do with an amaran light; the page behind it stands in for your wall.</p>
       <p class="now" id="now" aria-live="polite">Press play.</p>
       <p class="detail" id="detail">The light waits in the dark.</p>
       <div class="controls">
@@ -218,7 +228,7 @@
           <button type="button" data-mood="dawn" aria-pressed="false">Dawn</button>
         </div>
       </div>
-      <p class="sound-note" id="soundnote"></p>
+      <p class="sound-note" id="soundnote" role="status"></p>
     </div>
   </section>
 
@@ -229,26 +239,29 @@
       <button type="button" data-track="persiste" aria-pressed="false">Persiste</button>
     </div>
     <div class="track-head">
-      <h2 id="trackname">Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You</h2>
+      <h2 id="trackname" aria-live="polite">Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You</h2>
       <span class="clock-small" id="clocksmall">0:00 / 0:00</span>
     </div>
     <div class="timeline">
       <div class="clock"><b id="clocknow">0:00</b><span id="clocklen">of 0:00</span></div>
-      <span class="row-name r2">Music mode heard<small>blooms are the tall ticks</small></span>
+      <span class="row-name r2">Music mode heard<small>blooms are the dots</small></span>
       <span class="row-name r3" id="secondname">Experts marked</span>
       <div class="scrub" id="timeline" role="slider" tabindex="0" aria-label="Position in the track"
-           aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true">
+           aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true" aria-describedby="legend">
         <div class="row band-row"><canvas class="band" id="band" aria-hidden="true"></canvas><i class="ghost" id="ghost"></i><output class="tip" id="tip"></output></div>
         <div class="row lane-row" id="heard"></div>
         <div class="row lane-row" id="experts"></div>
       </div>
       <p class="readout" id="readout" aria-hidden="true"></p>
-      <p class="legend">Click or drag to jump. Arrow keys move ten seconds, with Shift one second.</p>
-      <div class="player" id="player"></div>
+      <p class="legend" id="legend">Click or drag to jump. Arrow keys move ten seconds, with Shift one second.</p>
+      <div class="listen">
+        <div class="player" id="player"></div>
+        <p class="honest" id="honest"></p>
+      </div>
     </div>
 
     <div class="notes">
-      <p class="honest" id="honest"></p>
+      <h2>How close it gets</h2>
       <p class="honest">Each track's light was computed offline by the real pipeline from a silent capture of the
         exact upload the player streams, so the light and the music stay in step. Only the colours, the section
         calls and the marks are stored here, never audio. Music mode is far from perfect: on 402 Creative Commons
@@ -271,17 +284,17 @@
     missyou: {
       soundcloud: 1886402916, file: "missyou.json", second: "Human expert marked (a best reading of live marks made while listening)",
       name: "Craig Connelly and Nicholas Gunn feat. Alina Renae, Miss You", voice: "Alina Renae",
-      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end. Against that reading, music mode hears the breakdown from 2:13 almost exactly (it blooms at 2:23 and 2:37), the build into the last drop from 2:44, four seconds early, and the drop at 3:24 to the second. It misses the first build, hearing groove until the drop at 1:17, and it holds the last drop until 4:55, where the expert hears the outro from 4:00.",
+      honest: "The owner played the 4:14 cut in A State of Trance episode 1180 and called out what they heard; their live marks were carried onto this full 5:05 version by matching the two recordings and read into sections with a start and an end. Against that reading, music mode hears the build into the last drop from 2:44, four seconds early, and the drop at 3:24 to the second. It hears the breakdown ten seconds after the kick leaves at 2:03 and blooms twice inside it, misses the first build, hearing groove until the drop at 1:17, and holds the last drop until 4:55, where the expert hears the outro from 4:00.",
     },
     throughitall: {
-      youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Human expert marked (not marked yet)",
+      youtube: "-bpf-iVS8IY", file: "throughitall.json", second: "Expert reading (by Claude from the recording, not a person)",
       name: "nilsix and Clara Yates, Through It All", voice: "Clara Yates",
-      honest: "Captured silently from Black Hole Recordings' upload and run through the whole pipeline; nobody has marked it yet, so this is music mode on its own. It opens out at 1:01 and again at 2:51, and in the breakdown from 2:13 it blooms twice, at 2:35 and 2:41, as the chords lift onto D and E major.",
+      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording: where the kick is, how the energy moves and when Clara Yates sings, without music mode's section model. Against it, music mode hears the breakdown seven seconds late at 2:13 and blooms twice inside it, at 2:35 and 2:40, and drops at 2:51, twelve seconds before the reading. Early on they disagree: music mode opens out from 0:04 and again at 1:01, where the reading hears an intro and then one long groove.",
     },
     persiste: {
-      youtube: "nqrqepe-yMA", file: "persiste.json", second: "Human expert marked (not marked yet)",
+      youtube: "nqrqepe-yMA", file: "persiste.json", second: "Expert reading (by Claude from the recording, not a person)",
       name: "Ferry Corsten, Persiste (A State of Trance 1300)",
-      honest: "Captured silently from Ferry Corsten's upload of the A State of Trance 1300 cut, which starts mid-mix at full energy; nobody has marked it yet, so this is music mode on its own. A short break at 0:49 drops straight back in, then the breakdown from 2:25 blooms at 2:26 and 2:38 as the chords lift onto A and G major, builds from 2:42 and drops at 3:13.",
+      honest: "No person has marked this one yet, so the second row is Claude's reading of the recording, made without music mode's section model. This A State of Trance 1300 cut starts mid-mix at full energy. Against the reading, music mode runs about eight seconds late through the main event: the breakdown at 2:25 (reading 2:16), the build at 2:42 (2:35) and the drop at 3:13 (3:05). It blooms at 2:26 and 2:38 inside the breakdown, and once at 0:51 in a short break the reading counts as groove.",
     },
   };
   let track = "missyou";
@@ -320,6 +333,9 @@
   const luminance = (rgb) => rgb.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; })
     .reduce((sum, x, i) => sum + x * [0.2126, 0.7152, 0.0722][i], 0);
 
+  const calm = matchMedia("(prefers-reduced-motion: reduce)");
+  // A moment can be shared: the address follows the track and where you jumped to.
+  const share = () => history.replaceState(null, "", `#${track}/t=${Math.round(position)}`);
   const frameAt = (t) => Math.max(0, Math.min(data.frames.length - 1, Math.round(t * 10) - 1));
 
   function paintBand() {
@@ -339,7 +355,8 @@
     const sum = [0, 0, 0];
     for (let i = from; i < to; i++) lightRGB(cols[i]).forEach((x, k) => { sum[k] += x; });
     let rgb = sum.map((x) => x / (to - from));
-    if (luminance(rgb) < 0.08) rgb = rgb.map((x) => x * 0.7 + 195 * 0.3);
+    // Lifted toward white until it clears 3:1 against the brightest wall (WCAG 1.4.11).
+    for (let k = 0; k < 10 && luminance(rgb) < 0.19; k++) rgb = rgb.map((x) => x * 0.85 + 230 * 0.15);
     return css(rgb.map(Math.round));
   }
 
@@ -348,6 +365,7 @@
     const d = data.duration;
     for (const [a, b, label] of spans) {
       const bar = document.createElement("i");
+      bar.title = `${label}, ${fmt(a)} to ${fmt(b)}`;
       bar.style.left = `${(a / d) * 100}%`;
       bar.style.width = `calc(${((b - a) / d) * 100}% - 2px)`;
       if (fill) bar.style.background = spanFill(a, b);
@@ -377,9 +395,16 @@
       if (f[1] !== cur) { heardSpans.push([start, f[0], NAMES[cur]]); start = f[0]; cur = f[1]; }
       if (i === data.frames.length - 1) heardSpans.push([start, f[0], NAMES[cur]]);
     });
-    const shown = heardSpans.filter((s) => s[2] === "Breakdown" || s[2] === "Build" || s[2] === "Drop");
+    // Spans under 4 s join their neighbour, and a section split by one short gap is one section.
+    const shown = [];
+    for (const span of heardSpans.filter((x) => x[2] === "Breakdown" || x[2] === "Build" || x[2] === "Drop")) {
+      const last = shown[shown.length - 1];
+      if (last && last[2] === span[2] && span[0] - last[1] <= 4) last[1] = span[1];
+      else if (span[1] - span[0] >= 4) shown.push(span.slice());
+    }
     const blooms = data.frames.filter((f) => f[5]).map((f) => f[0])
       .filter((t, i, all) => i === 0 || t - all[i - 1] > 4);  // one tick per bloom
+    shownSpans = shown;
     drawLane($("heard"), shown, [], blooms, true);
     expertSpans = [];
     if (data.expert) {
@@ -395,16 +420,19 @@
     }
   }
 
+  let shownSpans = [];
   function heardAt(t) {
-    return heardSpans.find(([a, b]) => t >= a && t < b) || heardSpans[heardSpans.length - 1];
+    return shownSpans.find(([a, b]) => t >= a && t < b) || heardSpans.find(([a, b]) => t >= a && t < b)
+      || heardSpans[heardSpans.length - 1];
   }
   // What the second row says near a moment, within `reach` seconds.
   function secondAt(t, reach) {
     if (data.expert) {
+      const who = data.expert.by === "claude" ? "Claude's reading" : "Human expert";
       const near = data.expert.points.filter(([m]) => m <= t + 0.5 && t - m <= reach);
-      if (near.length) return `Human expert: ${near[near.length - 1][1]} at ${fmt(near[near.length - 1][0])}`;
+      if (near.length) return `${who}: ${near[near.length - 1][1]} at ${fmt(near[near.length - 1][0])}`;
       const span = data.expert.spans.find(([a, b]) => t >= a && t < b);
-      return span ? `Human expert: ${span[2]}, ${fmt(span[0])} to ${fmt(span[1])}` : null;
+      return span ? `${who}: ${span[2]}, ${fmt(span[0])} to ${fmt(span[1])}` : null;
     }
     if (data.marks) {
       const before = data.marks.filter(([m]) => m <= t + 0.5 && t - m <= reach);
@@ -420,7 +448,8 @@
     position = Math.max(0, Math.min(data.duration, t));
     const i = frameAt(position), f = data.frames[i], c = data.colours[mood][i];
     tube.style.background = lightColour(c);
-    root.style.setProperty("--wall", wallColour(c));
+    // With reduced motion the tube still shows the light, but the whole wall holds still.
+    if (!calm.matches) root.style.setProperty("--wall", wallColour(c));
     timeline.style.setProperty("--pos", `${(position / data.duration) * 100}%`);
     $("clocknow").textContent = fmt(position);
     $("clocksmall").textContent = `${fmt(position)} / ${fmt(data.duration)}`;
@@ -431,7 +460,7 @@
       : !data.experts.build.length && !data.experts.break.length && !data.experts.drop.length;
     readout.textContent = unmarked ? heardText : `${heardText} ${second ? second + "." : data.marks ? "No mark near here." : "Experts: nothing marked here."}`;
     timeline.setAttribute("aria-valuenow", Math.round(position));
-    timeline.setAttribute("aria-valuetext", `${fmt(position)}, music mode hears ${heard[2] ? heard[2].toLowerCase() : "silence"}`);
+    timeline.setAttribute("aria-valuetext", `${fmt(position)}, music mode hears ${heard[2] ? heard[2].toLowerCase() : "silence"}${second ? `; ${second}` : ""}`);
     // A bloom is one moment; keep its words up for the bloom's hold.
     const recentBloom = data.frames.slice(Math.max(0, i - 40), i + 1).some((g) => g[5]);
     const key = f[1] === "breakdown" && recentBloom ? "bloom" : f[1];
@@ -507,16 +536,16 @@
     seek(fromPointer(e)); hover(e);
   });
   timeline.addEventListener("pointermove", (e) => { hover(e); if (dragging) seek(fromPointer(e)); });
-  const endDrag = () => { dragging = false; delete timeline.dataset.dragging; };
+  const endDrag = () => { if (dragging) share(); dragging = false; delete timeline.dataset.dragging; };
   timeline.addEventListener("pointerup", endDrag);
   timeline.addEventListener("pointercancel", endDrag);
   timeline.addEventListener("keydown", (e) => {
     if (!data) return;
     const step = e.shiftKey ? 1 : 10;
-    const moves = { ArrowRight: step, ArrowLeft: -step, PageUp: 60, PageDown: -60 };
-    if (e.key in moves) { e.preventDefault(); seek(position + moves[e.key]); }
-    if (e.key === "Home") { e.preventDefault(); seek(0); }
-    if (e.key === "End") { e.preventDefault(); seek(data.duration); }
+    const moves = { ArrowRight: step, ArrowUp: step, ArrowLeft: -step, ArrowDown: -step, PageUp: 60, PageDown: -60 };
+    if (e.key in moves) { e.preventDefault(); seek(position + moves[e.key]); share(); }
+    if (e.key === "Home") { e.preventDefault(); seek(0); share(); }
+    if (e.key === "End") { e.preventDefault(); seek(data.duration); share(); }
   });
 
   // SoundCloud's mini player: small, still attributed, and it drives the light's clock.

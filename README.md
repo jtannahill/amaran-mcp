@@ -1,14 +1,8 @@
 # amaran-mcp
 
-Control an amaran light from a Mac, by asking Claude or from the terminal.
-Two things it is for:
-
-- **Music mode.** The light follows what the Mac plays: slow colour through
-  the groove, pale when the kick drops out, and a bloom when a breakdown's
-  chords lift and the vocal comes in.
-- **Studio lighting from a prompt.** Describe the shot, a talking head or a
-  corporate interview, or show Claude a photo of the set, and it sets the
-  light to match.
+Control an amaran light from a Mac by asking Claude, and let it follow the
+music the way a lighting designer would: by the shape of the track, not the
+beat.
 
 <a href="https://jtannahill.github.io/amaran-mcp/">
 <picture>
@@ -18,20 +12,90 @@ Two things it is for:
 </a>
 
 **[Play a breakdown](https://jtannahill.github.io/amaran-mcp/)**: press play on
-a vocal trance track and watch the light do what music mode does, second by
-second, in step with the music: Craig Connelly's "Miss You" next to what a
-human expert marked while listening, nilsix and Clara Yates's "Through It
-All", and Ferry Corsten's "Persiste" from A State of Trance 1300.
+a vocal trance track and watch what music mode does, second by second, in step
+with the music, next to an expert's reading of the same track.
 
-An MCP server for Claude Code (or any MCP client) and a small CLI, for the
-[amaran PT2c](https://amarancreators.com/pages/amaran-pt2c) pixel tube and other Sidus Mesh lights. Not affiliated with or
-endorsed by Aputure or amaran.
-
-[Music mode](#music-mode) · [Studio lighting](#studio-lighting-from-a-prompt) ·
-[Setup](#setup) · [Tools](#tools) ·
-[What's next](#next) ·
-[How it reaches the light](#how-it-reaches-the-light) ·
+[So what](#so-what) · [When to use this](#when-to-use-this) ·
+[How to use this](#how-to-use-this) · [Music mode](#music-mode) ·
+[Studio lighting](#studio-lighting-from-a-prompt) · [Tools](#tools) ·
+[What's next](#next) · [How it reaches the light](#how-it-reaches-the-light) ·
 [Research](https://github.com/jtannahill/amaran-mcp/blob/main/docs/research.md)
+
+## So what
+
+Most music-reactive lights flash on every beat. It looks like a club toy, and
+in a room you work or listen in it wears thin in minutes. Music mode listens
+the way a musician does instead: it hears the tempo, the chords, the singing
+and the sections of a track, so the light drifts through the groove, pales
+when the kick drops out and blooms when a breakdown's chords lift, then opens
+out at the drop. It never flashes; colour can only change so fast.
+
+Lighting a talking head well is fiddly in the other direction: white balance,
+tint and level, set by hand and lost by the next call. Here you describe the
+shot, or show Claude a photo of the set, and it sets the light; a scene brings
+the same look back tomorrow.
+
+Everything runs on the Mac: the audio never leaves it, and the light is
+reached through amaran Desktop or directly over Bluetooth.
+
+## When to use this
+
+| You are | Use | Why |
+|---|---|---|
+| Listening to a trance or house set at your desk, with the light in view | Music mode (`ethereal`, `deep` or `dawn`) | The room moves with the track's sections, not its kick drum |
+| Streaming or recording with music playing on the Mac | Music mode | It follows whatever the Mac plays, AirPlay from an iPhone included |
+| On a video call, recording a talking head or a corporate interview | Studio lighting from a prompt | White light matched to the camera, no colour on the face |
+| Setting up the same shot again | `save_scene`, then `recall_scene` | One name brings back colour temperature, tint and level |
+| Wanting it to learn your music | The background listener and `mark` | Your own sessions become training data, kept on your Mac |
+
+It is not for stage or club lighting: it drives one light, it is slow by
+design, and it speaks to amaran lights, not DMX.
+
+## How to use this
+
+### Set it up once
+
+You need a Mac, [uv](https://docs.astral.sh/uv/), and amaran Desktop with the
+light paired in it.
+
+1. Quit amaran Desktop fully (it keeps running after its window closes, and
+   holds the light), then import the light:
+
+   ```sh
+   git clone https://github.com/jtannahill/amaran-mcp && cd amaran-mcp
+   uv run amaran-mcp import
+   uv run amaran-mcp status
+   ```
+
+2. Register it with Claude Code:
+
+   ```sh
+   claude mcp add -s user amaran -- \
+     uv --directory "$PWD" run amaran-mcp serve
+   ```
+
+3. Ask for something: "warm white at 40 percent", "a slow violet", "start
+   music mode, deep".
+
+`import` writes `~/.config/amaran-mcp/light.json` (mode 600; it holds the mesh
+keys). The first Bluetooth use asks for permission for the app running the
+command. If the light was paired with the amaran phone app instead,
+`uv run amaran-mcp import --account you@example.com` fetches the keys from the
+amaran account (the password is asked for and never stored; untested).
+
+### Then ask for what you want
+
+| Say to Claude | What happens |
+|---|---|
+| "Start music mode" or "start music mode, deep" | The light follows what the Mac plays, in that mood |
+| "Stop music mode" | The light goes back to how it was |
+| "Corporate interview, camera at 5600K, soft and a touch warm" | White light at the right temperature and level |
+| "Here's a photo of my set, light my face for a webcam talk" | Claude reads the photo and sets white balance and level |
+| "Save this as interview A" / "recall interview A" | The look is kept and brought back |
+| "Warm white at 40 percent" or "a slow violet" | Direct control, as with any light |
+
+The same works from the terminal (`uv run amaran-mcp music --mood deep`, and
+the other commands under [Tools](#tools)).
 
 ## Music mode
 
@@ -169,35 +233,6 @@ Claude reads a photo of the set the way it reads any picture, so it can see
 the window, the room's colour and where the light sits, and pick the white
 balance and level from that. Today that is one light; a key, fill and back
 light setup is planned as more amaran lights join.
-
-
-You need a Mac, [uv](https://docs.astral.sh/uv/), and amaran Desktop with the
-light paired in it.
-
-1. Quit amaran Desktop fully (it keeps running after its window closes, and
-   holds the light), then import the light:
-
-   ```sh
-   git clone https://github.com/jtannahill/amaran-mcp && cd amaran-mcp
-   uv run amaran-mcp import
-   uv run amaran-mcp status
-   ```
-
-2. Register it with Claude Code:
-
-   ```sh
-   claude mcp add -s user amaran -- \
-     uv --directory "$PWD" run amaran-mcp serve
-   ```
-
-3. Ask for something: "warm white at 40 percent", "a slow violet", "start
-   music mode, deep".
-
-`import` writes `~/.config/amaran-mcp/light.json` (mode 600; it holds the mesh
-keys). The first Bluetooth use asks for permission for the app running the
-command. If the light was paired with the amaran phone app instead,
-`uv run amaran-mcp import --account you@example.com` fetches the keys from the
-amaran account (the password is asked for and never stored; untested).
 
 ## Tools
 

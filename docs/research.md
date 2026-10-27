@@ -36,6 +36,7 @@ Contents: [what it is for](#what-music-mode-is-for) ·
 [the section model](#sections-the-trained-model) ·
 [live check](#live-check-the-whole-pipeline-on-36-tracks) ·
 [the first marked session](#the-first-marked-session-miss-you) ·
+[expert reading](#an-expert-reading-for-unmarked-tracks) ·
 [colour](#colour-trance-wants-saturation) ·
 [tempo](#tempo-giantsteps) · [key](#key-beatport-edm-key) ·
 [the demo](#the-demo-page) · [open questions](#open-questions) ·
@@ -228,8 +229,20 @@ carry the same readings as live ones.
 | A synthetic singing voice | up to 0.40 singing |
 | A sung trance vocal entering a breakdown (owner's session) | about 0.30 to 0.35 singing |
 
-Real vocals read lower than expected, so the bloom's scale for a vocal is due
-to be recalibrated from the owner's marked sessions.
+Real vocals read far lower than the 0 to 1 scale suggests. Across three
+captured vocal trance tracks:
+
+| Track | Median | 75th percentile | 90th percentile | Highest |
+|---|---|---|---|---|
+| Miss You (Alina Renae) | 0.06 | 0.27 | 0.42 | 0.72 |
+| Through It All (Clara Yates) | 0.10 | 0.28 | 0.37 | 0.58 |
+| Persiste (instrumental) | 0.01 | 0.02 | 0.10 | 0.23 |
+
+So a real vocal added only a third of its swell to a bloom, and a quiet line
+under 0.3 ended the bloom early. The renderer now rescales the reading before
+using it: 0.08 and below is no voice, 0.40 a full one. A sung 0.38 now gives
+almost the whole swell and a line at 0.22 keeps the bloom alive. The section
+model keeps the raw reading, the scale it was trained on.
 
 ## Sections: the trained model
 
@@ -363,20 +376,21 @@ there. They were read into sections the way an expert annotation is written,
 each with a start and an end, plus the named moments: Alina Renae's vocal
 coming in at 0:17, two lifts in the first drop, four lifts through the build into the last
 drop, and the peak at 3:37. The breakdown span is the one reading that rests
-on the gap in the marks and the audio rather than on a mark.
+on the gap in the marks and the audio rather than on a mark: it starts at 2:03,
+where the kick leaves (beat strength falls from about 0.8 to under 0.3).
 
 | Human expert, best reading | Music mode heard | |
 |---|---|---|
 | Build 0:48 to 1:15 | Groove | Missed |
-| Drop 1:15 to 2:13 | Drop from 1:17 | Agrees, 2 s late |
-| Breakdown 2:13 to 2:48 | Breakdown from 2:13, blooms at 2:23 and 2:37 | Agrees |
+| Drop 1:15 to 2:03 | Drop from 1:17 | Agrees, 2 s late |
+| Breakdown 2:03 to 2:48 | Breakdown from 2:13, blooms at 2:23 and 2:37 | 10 s late |
 | Build 2:48 to 3:24 | Build from 2:44 | Agrees, 4 s early |
 | Drop 3:24 to 4:00 | Drop at 3:24 | Agrees, to the second |
 | Outro from 4:00 | Drop until 4:55 | Late |
 
-Read this way, music mode agrees on the breakdown, the build into the last
-drop and both drops; it misses the first build and holds the last drop well
-past the outro. The owner also used words the
+Read this way, music mode agrees on the build into the last drop and both
+drops, hears the breakdown ten seconds late, misses the first build, and holds
+the last drop well past the outro. The owner also used words the
 model has no class for, "crescendo" and "top of the climax", which suggests
 the drop needs a rising part and a peak. This is the first session for the
 local, trance-only model.
@@ -384,6 +398,29 @@ local, trance-only model.
 The capture clipped about 1% of samples, because Core Audio's mono mixdown of
 a stereo app reaches twice full scale; the capture tool now scales such a
 capture down instead.
+
+## An expert reading for unmarked tracks
+
+Two of the demo tracks have no human marks, so `tools/expert_reading.py` reads
+them the way an annotator would, from signals music mode's section model does
+not use in this form:
+
+| Signal | How |
+|---|---|
+| Is the kick in | Beat strength: how strongly 40 to 150 Hz pulses at 100 to 160 BPM over 4 s, from a 100 frames a second spectrogram |
+| How loud | Log-mel energy over 8 s, against the track's own range |
+| Who is singing | Apple's singing class above 0.25 for 2 s; a later entry after 30 s without is "again" |
+
+No kick is a breakdown; when the kick returns, it is a build while the energy
+still climbs, then the drop; with the kick at the track's top energy it is a
+drop, below it a groove; the start is an intro and everything after the last
+drop the outro. Every section lasts at least 8 s.
+
+Checked against the human expert's reading of Miss You, it finds the same
+breakdown (2:04 against 2:03), the build into the last drop 10 s late, the last
+drop 14 s late and the outro 7 s late; its first minute is wrong (it hears a
+drop at 0:57 where the human hears a build until 1:15). On the page these
+rows are labelled as Claude's reading, never as a person's.
 
 ## Colour: trance wants saturation
 
@@ -533,6 +570,7 @@ uv run python tools/capture_app.py track.wav --seconds 330 --mute
 uv run python tools/align_versions.py cut.wav track.wav --marks marks.json --start SECONDS --out full-marks.json
 uv run python tools/demo_timeline.py track.wav --marks full-marks.json --out docs/missyou.json
 # The expert reading in docs/missyou.json ("expert": spans and points) is written by hand from the marks.
+uv run python tools/expert_reading.py track.wav --classes classes.jsonl --singer NAME --json
 uv run python tools/demo_hero.py docs/missyou.json docs --still 150
 uv run python tools/research_figures.py --out docs/figures
 ```
