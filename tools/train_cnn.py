@@ -130,6 +130,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=6)
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--trees-results", type=Path, help="cv_results.json from train_sections.py")
+    parser.add_argument("--save-heldout", type=Path, help="write each track's held-out probabilities here (for ensembles)")
     args = parser.parse_args()
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     tracks = load(args.mel.expanduser())
@@ -147,6 +148,11 @@ def main() -> None:
         model = sections.Model(export_cnn(net, level_mean, level_scale))
         for i in held:
             t = tracks[i]
+            if args.save_heldout:
+                args.save_heldout.mkdir(parents=True, exist_ok=True)
+                windows = np.stack([window_at(t["mel"], s) for s in range(len(t["y"]))])
+                probs = np.concatenate([model.proba_batch(windows[j : j + 256]) for j in range(0, len(windows), 256)])
+                np.savez(args.save_heldout / f"{t['name']}.npz", proba=probs, classes=np.array(model.classes))
             rules = [train_sections.SCORE_AS.get(s, s) for s in t["rules"]]
             rules_results.append(score_sections.score(t["y"], rules, t["true_releases"], t["rule_releases"]))
             predicted, releases = decode(model, t)

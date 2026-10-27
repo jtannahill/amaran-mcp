@@ -130,6 +130,7 @@ def main() -> None:
     parser.add_argument("--owner", action="store_true", help="also train on the owner's sessions; write the local model")
     parser.add_argument("--owner-features", type=Path, default=Path.home() / ".config/amaran-mcp/features")
     parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--save-heldout", type=Path, help="write each track's held-out probabilities here (for ensembles)")
     args = parser.parse_args()
 
     public = load(args.features.expanduser())
@@ -146,6 +147,10 @@ def main() -> None:
         model, _ = fit(train, seed=k)
         for i in held:
             t = public[i]
+            if args.save_heldout:
+                args.save_heldout.mkdir(parents=True, exist_ok=True)
+                np.savez(args.save_heldout / f"{t['name']}.npz", proba=model.proba_batch(t["X"]),
+                         classes=np.array(model.classes))
             rules = [SCORE_AS.get(s, s) for s in t["rules"]]
             rules_results.append(score_sections.score(t["y"], rules, t["true_releases"], t["rule_releases"]))
             predicted, releases = decode(model, t["X"])
