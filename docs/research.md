@@ -74,10 +74,24 @@ half, triple and third tempo.
 uv run python tools/benchmark_tempo.py ~/datasets/giantsteps-tempo-dataset
 ```
 
-First look, 30 tracks between 100 and 150 BPM: whenever the tracker locked a
-tempo it was right, but on mastered tracks its confidence (0.05 to 0.41) rarely
-reached the threshold tuned on synthetic kicks (0.55): 10 of 30 locked. A
-lower threshold locks 25 of 30 correctly. Full results: _in progress_.
+Whenever the tracker locked a tempo it was right, but on mastered tracks its
+confidence rarely reached the threshold tuned on synthetic kicks (0.55). The
+threshold was swept on 417 previews; Accuracy 1 for tracks between 100 and
+150 BPM:
+
+| Threshold | Trance (68) | House (73) | All (276) |
+| --- | --- | --- | --- |
+| 0.55 (synthetic) | 75.0% | 32.9% | 39.1% |
+| 0.40 | 95.6% | 57.5% | 60.5% |
+| 0.30 | 98.5% | 78.1% | 73.9% |
+| **0.25 (chosen)** | **97.1%** | **86.3%** | **78.6%** |
+| 0.20 | 97.1% | 87.7% | 84.4% |
+
+Lowering it exposed two things the synthetic tests had not: sidechain pumping
+of a held sub-bass reads as a beat at the track's tempo, and a sudden level
+jump reads as one kick. Kick presence now also needs a sharp attack, and a
+confirmed-kick release needs the kick to last 0.75 s. On the owner's ASOT
+clip, the false release at 1:48 disappeared with these changes.
 
 ### Key: Beatport EDM Key Dataset
 
@@ -102,9 +116,11 @@ Results: _in progress_.
 macOS SoundAnalysis ships a built-in classifier with 303 classes, including
 speech, singing, choir_singing, rapping, synthesizer, bass_drum, crowd and
 applause. It runs on the same captured audio, on-device. Singing makes the
-bloom bigger; speech (a host talking over the music) never counts.
-
-Status: _in progress_.
+bloom bigger; speech (a host talking over the music) never counts. The capture
+helper also classifies files (`--classify-file`), so training features include
+the same readings as live ones. First check: plain speech reads 0.96 speech; a
+synthetic singing voice reads up to 0.40 singing. Sung trance vocals are still
+to be checked on the owner's recordings.
 
 ### Sections: a small trained model
 
@@ -113,6 +129,37 @@ Training data: the Socially Significant Music Events set
 IEEE Transactions on Multimedia): 402 full Creative Commons SoundCloud EDM
 tracks with expert-labelled drops, builds and breaks; plus the owner's own
 labelled clips. The model ships only if it beats the hand-written rules on
-held-out tracks.
+held-out tracks (5 folds, split by track).
 
-Status: _in progress_.
+Getting the measurement right came first:
+
+- 58% of SSME seconds are groove, so "always groove" scores 58% raw
+  accuracy, more than the rules (51%). The gate uses balanced accuracy (mean
+  per-section recall), where always-groove scores 0.25.
+- Boundary scores were first averaged per track, which scored tracks with
+  nothing to find and nothing predicted as perfect and inflated the rules'
+  build score to 0.32 although they call builds 1% of the time. They are now
+  pooled over all tracks.
+- SSME often leaves a second or two between a build's end and the drop; those
+  gaps now belong to the build, or a drop would follow a "groove".
+
+Results, held out, pooled over 402 tracks:
+
+| Model | Balanced accuracy | Breakdown starts F | Build starts F | Release F |
+| --- | --- | --- | --- | --- |
+| Hand-written rules | 0.364 | 0.016 | 0.000 | 0.095 |
+| MLP on music mode's 15 readings | 0.423 | below rules | below rules | |
+| Gradient-boosted trees + spectral summary | **0.490** | **0.083** | **0.090** | **0.190** |
+| Spectrogram CNN | _training_ | | | |
+
+The trees are shipped (`src/amaran_mcp/music/sections.npz`, Creative Commons
+data only); music mode runs them in numpy, 10 ms once a second, under a state
+machine that keeps musical order and minimum section lengths. On the owner's
+ASOT breakdown they caught a build the rules missed and mislabelled part of a
+chord-cycling breakdown as groove: broad EDM is not trance, which is why the
+owner's own marked sessions matter most.
+
+```sh
+uv run python tools/extract_features.py ~/datasets/ssme --out ~/datasets/features/ssme
+uv run python tools/train_sections.py --features ~/datasets/features/ssme
+```
