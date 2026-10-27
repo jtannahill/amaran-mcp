@@ -19,7 +19,7 @@ BPM_RANGE = (100.0, 150.0)
 WINDOW_SECONDS = 8.0  # envelope history used for the estimate
 ESTIMATE_EVERY = 0.5  # seconds between estimates
 MIN_HISTORY = 4.0  # seconds before the first estimate
-CONFIDENT = 0.55  # a locked kick scores about 0.75; two clashing tempos about 0.5
+CONFIDENT = 0.25  # tuned on GiantSteps (417 previews): trance 97% within 4%, house 86%; 0.55 gave 75% / 33%
 SPIKY = 0.5  # share of onset energy in the top 10% of frames: kicks are spiky, swells are not
 KICK_BAND = (40.0, 200.0)
 BEATS_PER_BAR = 4
@@ -188,7 +188,12 @@ class TempoTracker:
             ref = self._groove_onsets
             self._groove_onsets = level if ref is None else ref + (level - ref) * min(1.0, dt / GROOVE_REFERENCE)
         strength = level / self._groove_onsets if self._groove_onsets else 0.0
-        return pulse >= KICK_PULSE and strength >= KICK_ONSETS, strength
+        # A kick's attack is sharp; sidechain pumping of a held sub rises
+        # smoothly at the same rate (a real breakdown cue, seen in testing).
+        total = float(np.sum(raw * raw))
+        top = np.sort(raw)[-max(1, len(raw) // 10):]
+        spiky = total > 1e-12 and float(np.sum(top * top)) / total >= SPIKY
+        return pulse >= KICK_PULSE and strength >= KICK_ONSETS and spiky, strength
 
     def _jump(self) -> float:
         recent = int(JUMP_WINDOW * self.frame_rate)

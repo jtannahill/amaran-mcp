@@ -41,6 +41,7 @@ PULSE_WINDOW = 1.0
 RELEASE_LEVEL = 0.8  # bass back above this share of its reference: release
 RELEASE_JUMP = 3.0  # low-band onsets in the last 0.5 s against the 8 s before
 RELEASE_PULSE = 0.45  # bass pulsing needed for a fast release (a swell pumps less)
+KICK_CONFIRM = 0.75  # seconds a kick must persist before it confirms a release (a level jump is one block)
 KICK_ARRIVES = 2.0  # seconds of kick that end an intro
 BREAKDOWN_BARS = 4  # kick gone this long after a groove
 BUILD_TENSION = 0.5
@@ -315,7 +316,7 @@ class Analyzer:
             # Within half a second of a real drop; a breakdown's bass swell
             # (seen on a real episode) jumps less and pumps more gently.
             slam = beat.onset_jump >= RELEASE_JUMP and self._pulse_cv >= RELEASE_PULSE and bass_back
-            if slam or (kick and bass_back):
+            if slam or (kick and self._kick_time >= KICK_CONFIRM and bass_back):
                 self._enter("climax")
                 # The kick is back by definition, even before the slower test
                 # confirms it; otherwise the breakdown's no-kick time sends the

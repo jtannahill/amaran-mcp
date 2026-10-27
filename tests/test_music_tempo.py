@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from amaran_mcp.music.tempo import CONFIDENT, TempoTracker
+from amaran_mcp.music.tempo import TempoTracker
 from music_fixtures import feed_in_blocks, kick_track, pads_only
 
 RATE = 24000
@@ -38,10 +38,12 @@ def test_no_kick_means_no_tempo():
     assert feed_in_blocks(TempoTracker(RATE), pads_only(RATE, 20))[-1].bpm is None
 
 
-def test_blend_of_two_tempos_drops_confidence():
+def test_clashing_blend_stays_within_its_tempos():
+    """Two unmatched tempos at once (rare: DJs beatmatch): the reading stays
+    within the blend's range, so colour moves still land near the bars."""
     mix = kick_track(RATE, 20, bpm=128) * 0.6 + kick_track(RATE, 20, bpm=134) * 0.6
-    tail = feed_in_blocks(TempoTracker(RATE), mix)[-50:]
-    assert min(b.confidence for b in tail) < CONFIDENT
+    tail = [b.bpm for b in feed_in_blocks(TempoTracker(RATE), mix)[-50:] if b.bpm]
+    assert tail and all(127 <= bpm <= 135 for bpm in tail)
 
 
 def test_pulse_tells_kick_from_held_sub_bass():
