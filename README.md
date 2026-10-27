@@ -16,8 +16,8 @@ hand-written rules. Everything runs on the Mac.
 
 <a href="https://jtannahill.github.io/amaran-mcp/">
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/hero-narrow.svg">
-  <img alt="A light tube changing colour through Craig Connelly and Nicholas Gunn's Miss You as music mode drives it: blues and violets through the drops, warmer through the breakdown, full at the final drop. Below it, the sections music mode heard." src="docs/hero-wide.svg">
+  <source media="(max-width: 600px)" srcset="https://raw.githubusercontent.com/jtannahill/amaran-mcp/main/docs/hero-narrow.svg">
+  <img alt="A light tube changing colour through Craig Connelly and Nicholas Gunn's Miss You as music mode drives it: blues and violets through the drops, warmer through the breakdown, full at the final drop. Below it, the sections music mode heard." src="https://raw.githubusercontent.com/jtannahill/amaran-mcp/main/docs/hero-wide.svg">
 </picture>
 </a>
 
