@@ -41,7 +41,12 @@ WANDER_DEGREES, WANDER_SECONDS = 6.0, 30.0  # slow drift around a held chord col
 BLOOM_RISE, BLOOM_FALL = 1.5, 1.5  # seconds (time constants)
 BLOOM_HOLD = 4.0  # seconds a bloom lasts at least
 BLOOM_MAX_PHRASES = 2
-BLOOM_VOCAL_END = 0.3  # the bloom eases back once the vocal falls below this
+BLOOM_VOCAL_END = 0.3  # the bloom eases back once vocal presence falls below this
+# Apple's classifier reads real sung vocals at about 0.25 to 0.45 (90th percentile 0.42
+# on Miss You, 0.37 on Through It All) and instrumentals near 0.01 to 0.10, so the
+# renderer rescales it: at or below VOCAL_FLOOR no voice, at VOCAL_FULL a full one.
+# The section model keeps the raw reading it was trained on.
+VOCAL_FLOOR, VOCAL_FULL = 0.08, 0.40
 BLOOM_SATURATION = 6.0  # luminous through brightness, barely whiter
 OPEN_SATURATION, OPEN_BRIGHTNESS = 6.0, 10.0  # at full openness
 
@@ -51,6 +56,12 @@ class Output:
     hue: float
     saturation: float
     brightness: float
+
+
+def vocal_presence(vocal: float) -> float:
+    """The classifier's vocal reading on the scale real singing actually reaches."""
+
+    return max(0.0, min(1.0, (vocal - VOCAL_FLOOR) / (VOCAL_FULL - VOCAL_FLOOR)))
 
 
 def _arc(a: float, b: float) -> float:
@@ -165,7 +176,7 @@ class Renderer:
         elif self._bloom_target > 0:
             phrase = 32 * 60 / f.beat.bpm if f.beat.bpm else 8 * FALLBACK_BAR
             held = self._now - self._bloom_since
-            vocal_gone = f.timbre.vocal < BLOOM_VOCAL_END and held >= BLOOM_HOLD
+            vocal_gone = vocal_presence(f.timbre.vocal) < BLOOM_VOCAL_END and held >= BLOOM_HOLD
             if vocal_gone or held >= BLOOM_MAX_PHRASES * phrase or f.section not in ("breakdown", "build"):
                 self._bloom_target = 0.0
         tau = BLOOM_RISE if self._bloom_target > self._bloom else BLOOM_FALL
@@ -213,7 +224,7 @@ class Renderer:
             warm = self._chord_colour(f, "warm") or (self.mood.warm or self.mood.anchors)[0]
             hue = (hue + _arc(hue, warm[0]) * self._bloom) % 360
             headroom = high - brightness
-            brightness += headroom * (0.3 + 0.3 * f.timbre.vocal) * self._bloom
+            brightness += headroom * (0.3 + 0.3 * vocal_presence(f.timbre.vocal)) * self._bloom
             saturation -= BLOOM_SATURATION * self._bloom
 
         opening = section in ("groove", "climax") or (section == "breakdown" and self._chord is not None)

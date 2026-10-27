@@ -193,3 +193,23 @@ def test_trance_reads_as_colour_not_grey():
         sats = [o.saturation for o in outs[8 * 8:]]  # after the intro
         assert sum(sats) / len(sats) >= 55, name
         assert sum(s < 30 for s in sats) / len(sats) <= 0.1, name
+
+
+def test_a_real_sung_vocal_gets_nearly_the_full_bloom():
+    # Apple's classifier reads real sung vocals at about 0.25 to 0.45 (Miss You,
+    # Through It All), not 1.0; a vocal at 0.38 should swell the bloom almost fully.
+    def peak(vocal):
+        r = Renderer(MOODS["ethereal"])
+        run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.5), 8)
+        r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=vocal), 1 / 8)
+        return max(o.brightness for o in run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=vocal), 6))
+    assert peak(1.0) - peak(0.38) <= 1.0
+
+
+def test_a_quiet_sung_phrase_keeps_the_bloom():
+    # A real vocal dipping to 0.22 between lines is still a vocal; the bloom holds.
+    r = Renderer(MOODS["ethereal"])
+    base = run(r, breakdown_f(seconds=8, chord_root=9, balance=-0.5), 8)[-1].brightness
+    r.step(breakdown_f(seconds=9, chord_root=9, balance=-0.5, bloom=True, vocal=0.38), 1 / 8)
+    held = run(r, breakdown_f(seconds=10, chord_root=9, balance=-0.5, vocal=0.22), 8)[-1].brightness
+    assert held >= base + 5
