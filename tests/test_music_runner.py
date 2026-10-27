@@ -154,3 +154,37 @@ def test_recording_session_saves_audio_features_and_marks(runner):
     session = sessions[0]
     assert list(session.glob("audio-*.flac")) and (session / "features.jsonl").stat().st_size > 0
     assert json.loads((session / "marks.json").read_text())[0]["kind"] == "lift"
+
+
+class StallingSource(FakeSource):
+    """Plays its audio, then the device goes away: capture fails, as a stall does."""
+
+    async def blocks(self):
+        async for block in super().blocks():
+            yield block
+        from amaran_mcp.music.capture import CaptureError
+        raise CaptureError("no audio for 10 s")
+
+
+def test_audio_that_stops_mid_song_settles_the_light_and_exits(runner):
+    light = FakeLight()
+    code = asyncio.run(runner.run(runner.RunnerConfig(), source=StallingSource([kick_track(RATE, 20)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 1
+    assert light.calls[-1] == ("apply", light.start)  # back to how it was
+    assert "stopped listening" in status(runner)["message"]
+
+
+def test_a_slow_music_app_does_not_hold_up_the_audio(runner):
+    import time
+
+    def slow_music():
+        time.sleep(0.5)  # AppleScript taking its time
+        return None
+
+    started = time.perf_counter()
+    asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=5, music_poll_seconds=1),
+                           source=FakeSource([kick_track(RATE, 30), silence(RATE, 10)]),
+                           light=lambda: FakeLight(), music=slow_music))
+    # Inline, 40 polls at 0.5 s would take 20 s; in the background they overlap the audio.
+    assert time.perf_counter() - started < 8

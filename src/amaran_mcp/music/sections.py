@@ -142,6 +142,8 @@ class Model:
             self.leaf, self.value = weights["leaf"], weights["value"]
             self.roots, self.tree_class = weights["roots"], weights["tree_class"]
             self.depth = int(weights["depth"])
+            # Which class each tree votes for, as a matrix: leaf values @ this = per-class sums.
+            self._votes = np.eye(len(self.baseline))[np.asarray(self.tree_class, dtype=int)]
             return
         self.means, self.scales = weights["means"], weights["scales"]
         self.layers = []
@@ -166,18 +168,16 @@ class Model:
             return z / z.sum(axis=1, keepdims=True)
         X = np.atleast_2d(np.asarray(X, dtype=np.float64))
         if self.kind == "trees":
-            raw = np.tile(self.baseline, (len(X), 1))
-            rows = np.arange(len(X))
-            for root, cls in zip(self.roots, self.tree_class):
-                node = np.full(len(X), root)
-                for _ in range(self.depth):
-                    leaf = self.leaf[node]
-                    if leaf.all():
-                        break
-                    go_left = X[rows, self.feature[node]] <= self.threshold[node]
-                    node = np.where(leaf, node, np.where(go_left, self.left[node], self.right[node]))
-                raw[:, cls] += self.value[node]
-            z = raw
+            # Every tree at once: node[row, tree] walks down until each reaches a leaf.
+            rows = np.arange(len(X))[:, None]
+            node = np.tile(np.asarray(self.roots), (len(X), 1))
+            for _ in range(self.depth):
+                leaf = self.leaf[node]
+                if leaf.all():
+                    break
+                go_left = X[rows, self.feature[node]] <= self.threshold[node]
+                node = np.where(leaf, node, np.where(go_left, self.left[node], self.right[node]))
+            z = self.baseline + self.value[node] @ self._votes
         else:
             h = (X - self.means) / self.scales
             for W, b in self.layers[:-1]:

@@ -11,7 +11,7 @@ Claude Code, Cursor, GrokBot and any other MCP client that runs a local server.
 Underneath, Apple's on-device sound classifier separates singing from speech,
 and a 50/50 blend of gradient-boosted trees and a log-mel CNN, trained on 402
 expert-labelled Creative Commons EDM tracks, names the section once a second
-in 13 ms of numpy: balanced accuracy 0.49 on held-out tracks, against 0.36 for
+in 3 ms of numpy: balanced accuracy 0.49 on held-out tracks, against 0.36 for
 hand-written rules. Everything runs on the Mac.
 
 <a href="https://jtannahill.github.io/amaran-mcp/">
@@ -188,7 +188,7 @@ Why this matters for the model, and what the training data lacks:
 | **Capture** | A Core Audio process tap on the system output | Swift helper, macOS 14.2+ |
 | **Voices** | **Apple SoundAnalysis**, the built-in on-device sound classifier: singing, choir, speech, rapping, crowd | Apple's model, no network |
 | **Tempo and chords** | Kick-band onset tracking for the beat; chroma matched to 24 chords for the harmony and the minor-to-major lift | numpy |
-| **Sections** | **A machine-learned model** names intro, groove, breakdown, build or drop once a second | numpy, 13 ms a second |
+| **Sections** | **A machine-learned model** names intro, groove, breakdown, build or drop once a second | numpy, 3 ms a second |
 | **Light** | A renderer turns sections, chords and voice into one slow colour | numpy |
 
 Apple's classifier is how music mode tells a vocal from a DJ talking over the

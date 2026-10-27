@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 from bleak.exc import BleakError
@@ -199,3 +200,58 @@ def test_start_music_mode_releases_the_light_first(config, monkeypatch):
     monkeypatch.setattr(server.control, "start", lambda mood, record=True: order.append("start") or {"running": True})
     asyncio.run(server.start_music_mode("ethereal"))
     assert order == ["close", "start"]
+
+
+# ── Audio that stops arriving, and the listener's exits ─────────────────────────
+
+def test_capture_that_goes_quiet_for_good_raises(monkeypatch):
+    from amaran_mcp.music import capture
+
+    class Silent:
+        async def readexactly(self, n):
+            await asyncio.sleep(60)
+
+    source = capture.SystemAudio()
+    source.rate = 24000
+    source._process = SimpleNamespace(stdout=Silent(), returncode=None)
+
+    async def started():
+        pass
+    monkeypatch.setattr(source, "start", started)
+    monkeypatch.setattr(capture, "STALL_SECONDS", 0.2)
+
+    async def go():
+        async for _ in source.blocks():
+            pass
+    with pytest.raises(capture.CaptureError, match="no audio"):
+        asyncio.run(go())
+
+
+def test_the_listener_fails_so_launchd_restarts_it_unless_asked_to_stop(config):
+    from amaran_mcp.music import listener, recorder
+    importlib.reload(recorder)
+    importlib.reload(listener)
+    from amaran_mcp.music.capture import CaptureError
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
+    from music_fixtures import FakeSource, silence
+
+    class Broken(FakeSource):
+        async def blocks(self):
+            raise CaptureError("the audio helper stopped")
+            yield
+
+    assert asyncio.run(listener.listen(source=FakeSource([silence(24000, 2)]))) == 1  # the audio just ended
+    started = time.monotonic()
+    assert asyncio.run(listener.listen(source=Broken([silence(24000, 1)]), retry_seconds=0.3)) == 1
+    assert time.monotonic() - started >= 0.3  # waited before failing, so it is not restarted in a tight loop
+
+
+def test_the_desktop_probe_is_not_repeated_on_every_call(monkeypatch):
+    from amaran_mcp import backends
+    importlib.reload(backends)
+    probes = []
+    monkeypatch.setattr(backends, "desktop_running", lambda: probes.append(1) or False)
+    monkeypatch.delenv("AMARAN_BACKEND", raising=False)
+    for _ in range(100):
+        backends.choose()
+    assert len(probes) == 1

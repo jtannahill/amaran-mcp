@@ -1,20 +1,31 @@
 """Pick how to reach the light: through amaran Desktop, or Bluetooth directly.
 
-AMARAN_BACKEND=auto (the default) checks on every call: when amaran Desktop is
-running it holds the light's one Bluetooth connection, so commands go through
-it; otherwise the Mac connects to the light itself. "desktop" or "bluetooth"
-forces one.
+AMARAN_BACKEND=auto (the default) checks whether amaran Desktop is running, at
+most every few seconds: when it is, it holds the light's one Bluetooth
+connection, so commands go through it; otherwise the Mac connects to the light
+itself. "desktop" or "bluetooth" forces one.
 """
 
 from __future__ import annotations
 
 import os
+import time
 
 from .config import ConfigError, LIGHT_PATH, load_light
 from .desktop import DesktopLight, desktop_running
 from .light import AmaranLight, LightBase
 
 _lights: dict[str, LightBase] = {}
+PROBE_SECONDS = 5.0  # music mode asks many times a second; Desktop is not opened that often
+_probe: tuple[float, bool] | None = None  # (when, whether Desktop was running)
+
+
+def _desktop_running() -> bool:
+    global _probe
+    now = time.monotonic()
+    if _probe is None or now - _probe[0] >= PROBE_SECONDS:
+        _probe = (now, desktop_running())
+    return _probe[1]
 
 
 def choose() -> str:
@@ -22,7 +33,7 @@ def choose() -> str:
     if backend not in ("auto", "desktop", "bluetooth"):
         raise ConfigError("AMARAN_BACKEND must be auto, desktop or bluetooth")
     if backend == "auto":
-        return "desktop" if desktop_running() else "bluetooth"
+        return "desktop" if _desktop_running() else "bluetooth"
     return backend
 
 

@@ -22,7 +22,7 @@ downloaded to `~/datasets`; personal listening recordings stay on the Mac that m
 | **Hears** | Tempo, kick in or out, chords and the minor-to-major lift, tension, openness, voice |
 | **Decides sections with** | A 50/50 blend of **gradient-boosted trees** and a **spectrogram CNN**, trained on 402 Creative Commons EDM tracks |
 | **Section accuracy** | 0.49 balanced on unseen tracks (hand-written rules 0.36) |
-| **Runs** | numpy only at runtime, 13 ms once a second |
+| **Runs** | numpy only at runtime, 3 ms once a second (the trees run as one array walk, not 800 Python loops) |
 | **Tempo** | 97% right on trance; 74% to 86% on house, depending on which house tracks are counted (GiantSteps); searched from 100 to 160 BPM |
 | **Weakest spot** | Finding breakdown starts: about one in ten within a few seconds |
 

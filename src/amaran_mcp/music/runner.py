@@ -177,6 +177,7 @@ class _Run:
         self.sessions = (Sessions(first_marks=0) if config.record and not isinstance(source, MicAudio)
                          else None)
         self._latest: Features | None = None  # for the status file
+        self._music_task: asyncio.Task | None = None  # the Music app check, off the audio loop
         self._log = open(config.log_features, "a") if config.log_features else None
 
     # ── Status ───────────────────────────────────────────────────────────────
@@ -310,70 +311,88 @@ class _Run:
         self.write_status()
 
         try:
-            async for block in self.source.blocks():
-                classes = self.source.latest_classes() if hasattr(self.source, "latest_classes") else None
-                f = self.analyzer.feed(block, classes)
-                self._pending = f if self._pending is None else merge_events(self._pending, f)
-                self._latest = f
-                self.now += len(block) / self.source.rate
-
-                if self.now >= self._next["music"]:
-                    self._next["music"] = self.now + self.config.music_poll_seconds
-                    await self.poll_music()
-                if self.sessions and self.sessions.feed(block, self.source.rate, f):
-                    self.write_status()
-                if self.now >= self._next["control"]:
-                    self._next["control"] = self.now + CONTROL_EVERY
-                    self.renderer.brightness_offset = _read_offset()
-                    if self.sessions:
-                        self.sessions.take_marks()
-
-                # Exact zeros while Music says it is playing: capture is refused.
-                if f.digital_zero:
-                    self._zero_since = self.now if self._zero_since is None else self._zero_since
-                    if self.now - self._zero_since >= ZERO_SECONDS and self.track and self.track.playing:
-                        self.message = PERMISSION_MESSAGE
-                        print(PERMISSION_MESSAGE, file=sys.stderr)
-                        self.write_status()
-                        return 2
-                else:
-                    self._zero_since = None
-
-                if self.now >= self._next["tick"]:
-                    dt = self._tick_seconds()
-                    self._next["tick"] = self.now + dt
-                    self._posted = None
-                    self.tick(self._pending, dt)
-                    self._log_tick(self._pending)
-                    self._pending = None
-
-                if self.state == "listening" and not self._fade:
-                    if self.stop.is_set():
-                        break
-                    if self.now - self._listening_since >= self.config.silence_exit_seconds:
-                        break
-                if self.now >= self._next["status"]:
-                    self._next["status"] = self.now + STATUS_EVERY
-                    self.write_status()
+            try:
+                return await self._listen()
+            except CaptureError as err:
+                # The audio stopped (the output device changed, the Mac slept): settle and leave.
+                self.message = f"music mode stopped listening: {err}"
+                log.warning(self.message)
+                return 1
         finally:
-            # Source ended mid-song (or an error): finish the fade back.
-            if self.state == "playing" and not self._fade:
-                self._plan_settle(self.renderer._out)
-            while self._fade:
-                self.writer.post(self._fade.pop(0))
-                if not await self.writer.drain():
-                    log.warning("the light stopped taking commands; leaving it as it is")
-                    self._fade.clear()
-            await self.writer.close()
-            if self.state == "settling":
-                self.state = "listening"
-            self.write_status()
-            await self.source.close()
-            if self._log:
-                self._log.close()
-            if self.sessions:
-                self.sessions.close()
+            if self._music_task:
+                self._music_task.cancel()
+            await self._settle_and_close()
+
+    async def _listen(self) -> int:
+        """Follow the audio until silence times out or a stop: 0, or 2 when capture is refused."""
+
+        async for block in self.source.blocks():
+            classes = self.source.latest_classes() if hasattr(self.source, "latest_classes") else None
+            f = self.analyzer.feed(block, classes)
+            self._pending = f if self._pending is None else merge_events(self._pending, f)
+            self._latest = f
+            self.now += len(block) / self.source.rate
+
+            if self.now >= self._next["music"]:
+                self._next["music"] = self.now + self.config.music_poll_seconds
+                # AppleScript can take a second; audio must keep flowing meanwhile.
+                if self._music_task is None or self._music_task.done():
+                    self._music_task = asyncio.get_running_loop().create_task(self.poll_music())
+            if self.sessions and self.sessions.feed(block, self.source.rate, f):
+                self.write_status()
+            if self.now >= self._next["control"]:
+                self._next["control"] = self.now + CONTROL_EVERY
+                self.renderer.brightness_offset = _read_offset()
+                if self.sessions:
+                    self.sessions.take_marks()
+
+            # Exact zeros while Music says it is playing: capture is refused.
+            if f.digital_zero:
+                self._zero_since = self.now if self._zero_since is None else self._zero_since
+                if self.now - self._zero_since >= ZERO_SECONDS and self.track and self.track.playing:
+                    self.message = PERMISSION_MESSAGE
+                    print(PERMISSION_MESSAGE, file=sys.stderr)
+                    self.write_status()
+                    return 2
+            else:
+                self._zero_since = None
+
+            if self.now >= self._next["tick"]:
+                dt = self._tick_seconds()
+                self._next["tick"] = self.now + dt
+                self._posted = None
+                self.tick(self._pending, dt)
+                self._log_tick(self._pending)
+                self._pending = None
+
+            if self.state == "listening" and not self._fade:
+                if self.stop.is_set():
+                    break
+                if self.now - self._listening_since >= self.config.silence_exit_seconds:
+                    break
+            if self.now >= self._next["status"]:
+                self._next["status"] = self.now + STATUS_EVERY
+                self.write_status()
         return 0
+
+    async def _settle_and_close(self) -> None:
+        # Source ended mid-song (or an error): finish the fade back.
+        if self.state == "playing" and not self._fade:
+            self._plan_settle(self.renderer._out)
+        while self._fade:
+            self.writer.post(self._fade.pop(0))
+            if not await self.writer.drain():
+                log.warning("the light stopped taking commands; leaving it as it is")
+                self._fade.clear()
+        await self.writer.close()
+        if self.state == "settling":
+            self.state = "listening"
+        self.write_status()
+        await self.source.close()
+        if self._log:
+            self._log.close()
+        if self.sessions:
+            self.sessions.close()
 
 
 async def run(config: RunnerConfig, source: Source | None = None,

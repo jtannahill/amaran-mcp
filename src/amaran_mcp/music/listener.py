@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 STATUS_PATH = CONFIG_DIR / "listener.json"
 PREROLL_SECONDS = 10.0  # music is recognised a few seconds in; keep what came just before
+RETRY_SECONDS = 60.0  # after a capture failure, before exiting for launchd to restart
 REASK_SECONDS = 10.0  # how often a refused session asks again whether it may open
 
 
@@ -173,13 +174,12 @@ def _music_mode_records() -> bool:
     return (control.status() or {}).get("recorded_by") == "music mode"
 
 
-async def listen(source: Source | None = None, quiet_close_seconds: float = 120.0) -> int:
-    try:
-        source = source or SystemAudio()
-        blocks = source.blocks()
-    except CaptureError as err:
-        log.error("cannot listen: %s", err)
-        return 1
+async def listen(source: Source | None = None, quiet_close_seconds: float = 120.0,
+                 retry_seconds: float = RETRY_SECONDS) -> int:
+    """Record until stopped. Returns 0 only when asked to stop: any other end is a
+    failure, so the login item (KeepAlive on failure) starts the listener again."""
+
+    source = source or SystemAudio()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -201,7 +201,7 @@ async def listen(source: Source | None = None, quiet_close_seconds: float = 120.
         })
 
     try:
-        async for block in blocks:
+        async for block in source.blocks():
             if stop.is_set():
                 break
             rate = source.rate
@@ -216,8 +216,17 @@ async def listen(source: Source | None = None, quiet_close_seconds: float = 120.
                 next_status = now + 5.0
                 sessions.take_marks()
                 write_status()
+    except CaptureError as err:
+        log.error("cannot listen: %s", err)
+        # Wait before failing, so a helper that keeps breaking is retried every
+        # minute or so, not every 10 s; a stop request ends the wait.
+        try:
+            await asyncio.wait_for(stop.wait(), retry_seconds)
+        except TimeoutError:
+            pass
+        return 0 if stop.is_set() else 1
     finally:
         sessions.close()
         await source.close()
         write_status()
-    return 0
+    return 0 if stop.is_set() else 1

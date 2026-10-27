@@ -23,6 +23,8 @@ from ..config import CONFIG_DIR
 
 log = logging.getLogger(__name__)
 
+STALL_SECONDS = 10.0  # no audio at all for this long: the source has stopped
+
 HERE = Path(__file__).parent
 SWIFT_SOURCE = HERE / "systemtap.swift"
 INFO_PLIST = HERE / "Info.plist"
@@ -152,9 +154,13 @@ class SystemAudio:
         size = _block_size(self.rate) * 4
         while True:
             try:
-                data = await self._process.stdout.readexactly(size)
+                # The tap sends blocks, silent or not, while the output device runs. None for
+                # this long means it stopped: the device changed, or the Mac went to sleep.
+                data = await asyncio.wait_for(self._process.stdout.readexactly(size), STALL_SECONDS)
+            except TimeoutError:
+                raise CaptureError(f"no audio for {STALL_SECONDS:g} s (the output device changed or the Mac slept)") from None
             except asyncio.IncompleteReadError as err:
-                if err.partial:
+                if len(err.partial) >= 4:
                     yield np.frombuffer(err.partial[: len(err.partial) // 4 * 4], dtype="<f4").astype(np.float32)
                 code = await self._process.wait()
                 if code not in (0, -15):
