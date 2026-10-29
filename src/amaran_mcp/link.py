@@ -32,8 +32,9 @@ log = logging.getLogger(__name__)
 
 PROXY_SERVICE = "00001828-0000-1000-8000-00805f9b34fb"
 # The light advertises in bursts; on 2026-10-27 it went 25 s between them, so a
-# 20 s scan missed it. The scan stops at the first advert, so this is only a limit.
-SCAN_SECONDS = 45.0
+# 20 s scan missed it, and on 2026-10-29 it went 56 s, so a 45 s scan missed it.
+# The scan stops at the first advert, so this is only a limit.
+SCAN_SECONDS = 120.0
 # Writes go without response, so a disconnect straight after one can drop it:
 # seen on the light, a CLI command that printed ok and never arrived.
 FLUSH_SECONDS = 0.5
