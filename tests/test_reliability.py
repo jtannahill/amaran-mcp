@@ -116,6 +116,58 @@ def test_a_neighbours_light_on_another_network_is_never_used(config, monkeypatch
         asyncio.run(mesh._find())
 
 
+class Hangs:
+    """A client whose connects time out, as the light's sometimes do, until told otherwise."""
+
+    tries: list[str] = []
+    succeed_on = 2
+
+    def __init__(self, device, disconnected_callback=None):
+        self.device = device
+
+    async def connect(self, timeout):
+        Hangs.tries.append(self.device.address)
+        if len(Hangs.tries) < Hangs.succeed_on:
+            raise TimeoutError()
+
+    async def disconnect(self):
+        pass
+
+
+def _scans_find_the_light(link, monkeypatch, scans):
+    class Device:
+        address, name = "LIGHT", "light"
+
+    async def scan(filt, timeout):
+        scans.append(timeout)
+        return Device()
+    monkeypatch.setattr(link.BleakScanner, "find_device_by_filter", scan)
+
+
+def test_a_connect_that_hangs_is_given_up_and_the_light_found_again(config, monkeypatch):
+    link, mesh = make_link(config)
+    scans: list[float] = []
+    _scans_find_the_light(link, monkeypatch, scans)
+    Hangs.tries, Hangs.succeed_on = [], 2
+    monkeypatch.setattr(link, "BleakClient", Hangs)
+    client, device = asyncio.run(mesh._connect())
+    assert device.address == "LIGHT" and len(scans) == 2 and len(Hangs.tries) == 2
+    assert scans[1] < scans[0] <= link.SCAN_SECONDS  # one deadline for every try
+
+
+def test_connects_that_keep_hanging_end_in_a_link_error_at_the_deadline(config, monkeypatch):
+    link, mesh = make_link(config)
+    scans: list[float] = []
+    _scans_find_the_light(link, monkeypatch, scans)
+    Hangs.tries, Hangs.succeed_on = [], 10**6
+    monkeypatch.setattr(link, "BleakClient", Hangs)
+    clock = iter(range(0, 10**6, 20))  # each look at the clock is 20 s on
+    monkeypatch.setattr(link.time, "monotonic", lambda: next(clock))
+    with pytest.raises(link.LinkError, match=r"could not connect \(timed out\)"):
+        asyncio.run(mesh._connect())
+    assert 2 <= len(Hangs.tries) <= link.SCAN_SECONDS / 20
+
+
 # ── Music mode's light writer outlives any one failed command ──────────────────
 
 def test_the_writer_survives_an_unexpected_error(config):

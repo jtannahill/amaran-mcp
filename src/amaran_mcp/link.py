@@ -35,6 +35,10 @@ PROXY_SERVICE = "00001828-0000-1000-8000-00805f9b34fb"
 # 20 s scan missed it, and on 2026-10-29 it went 56 s, so a 45 s scan missed it.
 # The scan stops at the first advert, so this is only a limit.
 SCAN_SECONDS = 120.0
+# A connect that works finishes 2 to 3 s after the light is found. One that has not
+# by then can hang for its whole timeout (120 s, seen on 2026-10-29) while the next
+# try connects at once, so each try gets this long, then the scan starts again.
+CONNECT_SECONDS = 8.0
 # Writes go without response, so a disconnect straight after one can drop it:
 # seen on the light, a CLI command that printed ok and never arrived.
 FLUSH_SECONDS = 0.5
@@ -140,16 +144,7 @@ class MeshLink:
     async def _ensure(self) -> BleakClient:
         if self._client and self._client.is_connected:
             return self._client
-        device = await self._find()
-        log.info("connecting to %s (%s)", device.name or "light", device.address)
-        client = BleakClient(device, disconnected_callback=self._on_disconnect)
-        try:
-            await client.connect(timeout=15.0)
-        except (BleakError, TimeoutError) as err:
-            raise LinkError(
-                f"Found the light but could not connect ({err}). If the amaran app "
-                "is open and connected to it, close the app and try again."
-            ) from err
+        client, device = await self._connect()
         self._client = client
         try:
             self._beacon.clear()
@@ -184,7 +179,30 @@ class MeshLink:
             self.store.remember_device(device.address)
         return client
 
-    async def _find(self) -> BLEDevice:
+    async def _connect(self) -> tuple[BleakClient, BLEDevice]:
+        """Find the light and connect, trying again until SCAN_SECONDS have gone."""
+
+        deadline = time.monotonic() + SCAN_SECONDS
+        while True:
+            device = await self._find(max(deadline - time.monotonic(), 1.0))
+            log.info("connecting to %s (%s)", device.name or "light", device.address)
+            client = BleakClient(device, disconnected_callback=self._on_disconnect)
+            try:
+                await client.connect(timeout=CONNECT_SECONDS)
+                return client, device
+            except (BleakError, TimeoutError) as err:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                if time.monotonic() + CONNECT_SECONDS > deadline:
+                    raise LinkError(
+                        f"Found the light but could not connect ({str(err) or 'timed out'}). If the "
+                        "amaran app is open and connected to it, close the app and try again."
+                    ) from err
+                log.info("could not connect (%s); scanning again", str(err) or "timed out")
+
+    async def _find(self, timeout: float = SCAN_SECONDS) -> BLEDevice:
         # One scan that stops at the first sign of our light: the device that
         # last passed the beacon check, or a proxy advertising our network ID.
         # The light can go quiet for several seconds after a disconnect.
@@ -207,7 +225,7 @@ class MeshLink:
             return False
 
         try:
-            device = await BleakScanner.find_device_by_filter(ours, timeout=SCAN_SECONDS)
+            device = await BleakScanner.find_device_by_filter(ours, timeout=timeout)
         except BleakError as err:
             raise LinkError(
                 f"Could not scan for the light ({err}). Check that Bluetooth is on and that "
