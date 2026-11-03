@@ -14,7 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
-from .backends import close_all, current_light as light
+from .backends import close_all, current_light as light, release_idle_backends
 from .config import ConfigError, load_scenes
 from .desktop import DesktopError
 from .link import LinkError
@@ -67,6 +67,14 @@ async def take_over() -> None:
         await asyncio.to_thread(control.stop)
 
 
+async def _lamp():
+    """The light for this command, after closing a transport we stopped using."""
+
+    lamp = light()
+    await release_idle_backends()
+    return lamp
+
+
 Percent = Annotated[float, Field(ge=0, le=100, description="Brightness, 0-100 %")]
 CHANGES = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True)
 
@@ -78,7 +86,7 @@ async def get_light() -> dict[str, Any]:
     Also lists what this model supports (colour temperature range, effects)."""
 
     music = control.status() or {"running": False}
-    lamp = light()
+    lamp = await _lamp()
     if music["running"] and lamp.backend == "bluetooth":
         # Music mode holds the light's one Bluetooth connection.
         return {"light": lamp.name, "backend": lamp.backend, "music_mode": music}
@@ -99,7 +107,7 @@ async def set_power(on: bool) -> str:
     """Turn the light on or off. On restores what it was doing before."""
 
     await take_over()
-    await light().set_power(on)
+    await (await _lamp()).set_power(on)
     return "on" if on else "off"
 
 
@@ -114,7 +122,7 @@ async def set_brightness(brightness: Percent) -> str:
         offset = control.set_brightness(brightness)
         low, high = control.brightness_range(music.get("mood") or "ethereal", offset)
         return f"music mode brightness range moved to {low:g}..{high:g}%"
-    await light().set_brightness(brightness)
+    await (await _lamp()).set_brightness(brightness)
     return f"brightness {brightness:g}%"
 
 
@@ -127,7 +135,7 @@ async def set_white(
     """Set white light by colour temperature. get_light shows this model's range."""
 
     await take_over()
-    lamp = light()
+    lamp = await _lamp()
     await lamp.set_white(kelvin, brightness, tint)
     return f"white {kelvin}K at {lamp.state.brightness}%" + (f", tint {tint:+d}" if tint else "")
 
@@ -151,7 +159,7 @@ async def set_color(
     if hue is None:
         raise ValueError("Give a hue or a hex colour")
     await take_over()
-    lamp = light()
+    lamp = await _lamp()
     await lamp.set_color(hue, saturation, brightness)
     return f"colour hue {lamp.state.hue}, saturation {lamp.state.saturation}% at {lamp.state.brightness}%"
 
@@ -164,7 +172,7 @@ async def set_effect(
     """Start one of the light's built-in effects."""
 
     await take_over()
-    lamp = light()
+    lamp = await _lamp()
     await lamp.set_effect(effect, brightness)
     return f"effect {effect} at {lamp.state.brightness}%"
 
@@ -174,7 +182,7 @@ async def stop_effect() -> str:
     """Stop the running effect and return to the last steady white or colour."""
 
     await take_over()
-    await light().stop_effect()
+    await (await _lamp()).stop_effect()
     return "effect stopped"
 
 
@@ -182,7 +190,8 @@ async def stop_effect() -> str:
 async def save_scene(name: str) -> dict[str, Any]:
     """Save the light's current look under a name, replacing any scene with that name."""
 
-    lamp = light()
+    await take_over()
+    lamp = await _lamp()
     await lamp.read_status()
     return lamp.save_scene(name)
 
@@ -192,7 +201,7 @@ async def recall_scene(name: str) -> dict[str, Any]:
     """Put the light back into a saved scene. get_light lists the saved scenes."""
 
     await take_over()
-    return await light().recall_scene(name)
+    return await (await _lamp()).recall_scene(name)
 
 
 @tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
@@ -219,6 +228,9 @@ async def stop_music_mode() -> str:
     if result == "killed":
         return ("music mode stopped, but it did not finish fading back in time, "
                 "so the light may still show its last colour")
+    if result == "failed":
+        return ("music mode stopped, but the light did not take the restore, "
+                "so it may still show its last colour")
     return "music mode was not running"
 
 

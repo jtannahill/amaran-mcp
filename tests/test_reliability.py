@@ -63,6 +63,20 @@ def test_saving_other_state_never_lowers_the_counter(config):
     assert config.StateStore().next_seq == 101
 
 
+def test_a_reserve_does_not_write_an_older_iv_index_or_address(config):
+    early, late = config.StateStore(), config.StateStore()  # both read the file before either writes
+    early.set_iv_index(5)
+    early.remember_device("AA:BB")
+    late.reserve(1)
+    saved = config.StateStore()
+    assert saved.iv_index == 5 and saved.ble_address == "AA:BB" and saved.next_seq == 2
+    late.set_iv_index(1)  # a beacon behind the one already stored
+    assert config.StateStore().iv_index == 5
+    late.remember_device("CC:DD")  # this process just saw the light
+    saved = config.StateStore()
+    assert saved.ble_address == "CC:DD" and saved.next_seq == 2 and saved.iv_index == 5
+
+
 # ── Bluetooth errors reach callers as LinkError, never raw ─────────────────────
 
 def test_a_write_that_fails_twice_is_a_link_error(config):
@@ -185,7 +199,7 @@ def test_the_writer_survives_an_unexpected_error(config):
     async def go():
         writer = runner._Writer(lambda: Flaky(), errors.append)
         writer.post(("color", 1, 2, 3))
-        assert await writer.drain(1.0)
+        assert not await writer.drain(1.0)  # the light did not take the failed command
         writer.post(("color", 4, 5, 6))
         assert await writer.drain(1.0)
         await writer.close()
@@ -224,6 +238,16 @@ def test_stop_says_settled_when_music_mode_exits(control, monkeypatch):
     control.PID_PATH.write_text(f"{pid}\n")
     monkeypatch.setattr(control, "_ours", lambda p: True)
     assert control.stop(timeout=5) == "settled"
+
+
+def test_stop_says_failed_when_the_restore_did_not_land(control, monkeypatch):
+    from amaran_mcp.music import runner
+    pid = spawn("import time; time.sleep(30)")
+    control.PID_PATH.parent.mkdir(parents=True, exist_ok=True)
+    control.PID_PATH.write_text(f"{pid}\n")
+    runner.STATUS_PATH.write_text('{"restore_failed": true}\n')
+    monkeypatch.setattr(control, "_ours", lambda p: True)
+    assert control.stop(timeout=5) == "failed"
 
 
 def test_stop_says_killed_and_takes_the_whole_group_when_it_hangs(control, monkeypatch):
@@ -296,6 +320,80 @@ def test_the_listener_fails_so_launchd_restarts_it_unless_asked_to_stop(config):
     started = time.monotonic()
     assert asyncio.run(listener.listen(source=Broken([silence(24000, 1)]), retry_seconds=0.3)) == 1
     assert time.monotonic() - started >= 0.3  # waited before failing, so it is not restarted in a tight loop
+
+
+class _Quiet:
+    """A connected proxy that never sends a beacon."""
+
+    is_connected = True
+    mtu_size = 185
+
+    def __init__(self):
+        self.writes = 0
+        self.disconnected = False
+
+    async def start_notify(self, *_args, **_kwargs):
+        return None
+
+    async def write_gatt_char(self, *_args, **_kwargs):
+        self.writes += 1
+
+    async def disconnect(self):
+        self.disconnected = True
+        self.is_connected = False
+
+
+def test_an_unconfirmed_proxy_gets_no_mesh_traffic(config, monkeypatch):
+    link, mesh = make_link(config)
+    client = _Quiet()
+
+    async def connect():
+        mesh._on_network = False
+        return client, SimpleNamespace(address="STALE", name="light")
+
+    mesh._connect = connect
+    monkeypatch.setattr(link, "BEACON_SECONDS", 0.05)
+    with pytest.raises(link.LinkError, match="did not confirm"):
+        asyncio.run(mesh._ensure())
+    assert client.writes == 0 and client.disconnected
+
+
+def test_a_network_id_match_may_send_without_a_beacon(config, monkeypatch):
+    link, mesh = make_link(config)
+    client = _Quiet()
+
+    async def connect():
+        mesh._on_network = True
+        return client, SimpleNamespace(address="LIGHT", name="light")
+
+    mesh._connect = connect
+    monkeypatch.setattr(link, "BEACON_SECONDS", 0.05)
+    asyncio.run(mesh._ensure())
+    assert client.writes == 1 and not client.disconnected
+
+
+def test_switching_to_desktop_closes_the_bluetooth_link(config, monkeypatch):
+    from amaran_mcp import backends
+    importlib.reload(backends)
+    closed = []
+
+    class Lamp:
+        def __init__(self, name):
+            self.backend = name
+
+        async def close(self):
+            closed.append(self.backend)
+
+    monkeypatch.setattr(backends, "AmaranLight", lambda _light: Lamp("bluetooth"))
+    monkeypatch.setattr(backends, "DesktopLight", lambda _light: Lamp("desktop"))
+    monkeypatch.setattr(backends, "load_light", lambda: object())
+    monkeypatch.setattr(backends, "LIGHT_PATH", SimpleNamespace(exists=lambda: True))
+    monkeypatch.setenv("AMARAN_BACKEND", "bluetooth")
+    assert backends.current_light().backend == "bluetooth"
+    monkeypatch.setenv("AMARAN_BACKEND", "desktop")
+    assert backends.current_light().backend == "desktop"
+    asyncio.run(backends.release_idle_backends())
+    assert closed == ["bluetooth"]
 
 
 def test_the_desktop_probe_is_not_repeated_on_every_call(monkeypatch):

@@ -34,6 +34,15 @@ def test_balance_tracks_major_minor_mix():
     assert minor[-1].balance < -0.5
 
 
+def test_a_balance_lift_on_a_chord_change_is_kept():
+    from collections import deque
+    tracker = HarmonyTracker(RATE)
+    tracker._now = 10.0
+    tracker._history = deque([(10.0, 1.0)] * 8)
+    tracker._balances.append((8.0, -1.0))  # balance was minor a moment ago
+    assert tracker._lift_on_change((4, True), (7, True))  # major to major, balance rose
+
+
 def test_major_to_major_is_not_a_lift():
     """Seen on a real episode: Bbm-Ab-Gb-Ab would otherwise lift on every chord."""
     hs = feed_in_blocks(HarmonyTracker(RATE), progression(RATE, [("G#", False), ("F#", False), ("G#", False)], 5.0))

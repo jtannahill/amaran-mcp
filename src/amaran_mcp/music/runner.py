@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import json
@@ -23,7 +24,7 @@ import signal
 import sys
 from typing import Any
 
-from ..backends import current_light
+from ..backends import current_light, release_idle_backends
 from ..config import CONFIG_DIR, _write_private
 from ..desktop import DesktopError
 from ..light import LightBase, LightState
@@ -49,7 +50,7 @@ ZERO_SECONDS = 10.0
 STATUS_EVERY = 5.0
 CONTROL_EVERY = 1.0
 PERMISSION_MESSAGE = (
-    "Music mode hears only silence while the Music app is playing. Allow Terminal in "
+    "Music mode hears only silence. Allow Terminal in "
     "System Settings, Privacy and Security, Screen and System Audio Recording, then "
     "start music mode again."
 )
@@ -92,6 +93,7 @@ class _Writer:
         self._wake = asyncio.Event()
         self._idle = asyncio.Event()
         self._idle.set()
+        self._accepted = True  # the last command reached the light
         self._task = asyncio.get_running_loop().create_task(self._loop())
 
     def post(self, command: tuple) -> None:
@@ -113,27 +115,31 @@ class _Writer:
         kind, *args = command
         try:
             lamp = self._light()
+            await release_idle_backends()
             if kind == "color":
                 await lamp.set_color(*args)
             elif kind == "brightness":
                 await lamp.set_brightness(*args)
             elif kind == "apply":
                 await lamp.apply(*args)
+            self._accepted = True
         except (DesktopError, LinkError, ValueError, OSError) as err:
+            self._accepted = False
             log.warning("light command failed: %s", err)
             self._on_error(f"light command failed: {err}")
         except Exception as err:  # anything else: report it, but keep the writer alive
+            self._accepted = False
             log.exception("light command failed")
             self._on_error(f"light command failed: {err}")
 
     async def drain(self, timeout: float = DRAIN_SECONDS) -> bool:
-        """Wait for the last command to go out; False if the light did not take it in time."""
+        """Wait for the last command to go out. False if it failed or the light did not take it in time."""
 
         try:
             await asyncio.wait_for(self._idle.wait(), timeout)
-            return True
         except TimeoutError:
             return False
+        return self._accepted
 
     async def close(self) -> None:
         await self.drain()
@@ -179,6 +185,8 @@ class _Run:
         self._latest: Features | None = None  # for the status file
         self._music_task: asyncio.Task | None = None  # the Music app check, off the audio loop
         self._log = open(config.log_features, "a") if config.log_features else None
+        self._heard_sound = False  # exact zeros from the start are a missing capture permission
+        self.restore_failed = False
 
     # ── Status ───────────────────────────────────────────────────────────────
 
@@ -197,6 +205,8 @@ class _Run:
             "chord": self._latest.harmony.chord if self._latest else None,
             "recording": self.sessions.recording if self.sessions else None,
             "recording_stopped": self.sessions.stopped if self.sessions else None,
+            "records": self.sessions is not None,
+            "restore_failed": self.restore_failed,
         })
 
     def note_error(self, message: str) -> None:
@@ -299,18 +309,56 @@ class _Run:
             self._plan_fade_in()
             self.write_status()
 
+    async def _read_start(self) -> bool:
+        """Read the light before the loop. False when stop arrived during that read.
+
+        The scan can take the whole SCAN_SECONDS. Stop has to cancel it, or the
+        15 s wait in control.stop ends in SIGKILL and the link is never closed.
+        """
+
+        lamp = self.light()
+        read = asyncio.create_task(self._capture_start(lamp))
+        stopped = asyncio.create_task(self.stop.wait())
+        await asyncio.wait({read, stopped}, return_when=asyncio.FIRST_COMPLETED)
+        if self.stop.is_set() and not read.done():
+            read.cancel()
+            with suppress(asyncio.CancelledError):
+                await read
+            stopped.cancel()
+            with suppress(asyncio.CancelledError):
+                await stopped
+            self.message = "music mode stopped before it reached the light"
+            self.write_status()
+            return False
+        stopped.cancel()
+        with suppress(asyncio.CancelledError):
+            await stopped
+        try:
+            await read
+        except (DesktopError, LinkError, ValueError, OSError) as err:
+            self.note_error(f"could not read the light's starting state: {err}")
+        self.write_status()
+        return True
+
+    async def _capture_start(self, lamp: LightBase) -> None:
+        await lamp.read_status()
+        self.start_state = replace(lamp.state)
+
+    async def _release_light(self) -> None:
+        """Close the link after the last command, so that command can leave."""
+
+        await release_idle_backends()
+        close = getattr(self.light(), "close", None)
+        if close is not None:
+            with suppress(Exception):
+                await close()
+
     async def main(self) -> int:
         self.started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.writer = _Writer(self.light, self.note_error)
         try:
-            lamp = self.light()
-            await lamp.read_status()
-            self.start_state = replace(lamp.state)
-        except (DesktopError, LinkError, ValueError, OSError) as err:
-            self.note_error(f"could not read the light's starting state: {err}")
-        self.write_status()
-
-        try:
+            if not await self._read_start():
+                return 0
             try:
                 return await self._listen()
             except CaptureError as err:
@@ -346,15 +394,21 @@ class _Run:
                 if self.sessions:
                     self.sessions.take_marks()
 
-            # Exact zeros while Music says it is playing: capture is refused.
+            # Exact zeros from the start, or while Music.app says it is playing:
+            # capture is refused. A pause later, with Music.app idle, is silence.
             if f.digital_zero:
                 self._zero_since = self.now if self._zero_since is None else self._zero_since
-                if self.now - self._zero_since >= ZERO_SECONDS and self.track and self.track.playing:
+                # Zeros from the first block are a refused tap (Spotify, a browser,
+                # AirPlay). Zeros that begin later are a pause, unless Music.app
+                # itself says it is playing.
+                playing = self.track is not None and self.track.playing
+                if self.now - self._zero_since >= ZERO_SECONDS and (not self._heard_sound or playing):
                     self.message = PERMISSION_MESSAGE
                     print(PERMISSION_MESSAGE, file=sys.stderr)
                     self.write_status()
                     return 2
             else:
+                self._heard_sound = True
                 self._zero_since = None
 
             if self.now >= self._next["tick"]:
@@ -382,12 +436,14 @@ class _Run:
         while self._fade:
             self.writer.post(self._fade.pop(0))
             if not await self.writer.drain():
+                self.restore_failed = True
                 log.warning("the light stopped taking commands; leaving it as it is")
                 self._fade.clear()
         await self.writer.close()
         if self.state == "settling":
             self.state = "listening"
         self.write_status()
+        await self._release_light()
         await self.source.close()
         if self._log:
             self._log.close()

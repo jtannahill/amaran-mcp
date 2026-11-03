@@ -167,9 +167,10 @@ def _music_replay(path: Path) -> None:
 
 
 async def _run(args: argparse.Namespace) -> None:
-    from .backends import current_light
+    from .backends import current_light, release_idle_backends
 
     lamp = current_light()
+    await release_idle_backends()
     rest = [float(v) for v in args.values] if args.command != "effect" else []
     try:
         match args.command:
@@ -252,7 +253,9 @@ def main() -> None:
             _launch_agent(args.command == "install-listener")
         elif args.command == "music-stop":
             from .music import control
-            print({"settled": "stopped", "killed": "stopped (the fade back did not finish)"}.get(
+            print({"settled": "stopped",
+                   "killed": "stopped (the fade back did not finish)",
+                   "failed": "stopped (the light did not take the restore)"}.get(
                 control.stop(), "music mode was not running"))
         elif args.command == "music-probe":
             _music_probe(float(args.values[0]) if args.values else 10)

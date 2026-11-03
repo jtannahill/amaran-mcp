@@ -104,6 +104,40 @@ def test_zeros_while_music_app_playing_exits_with_permission_message(runner):
     assert "Screen and System Audio Recording" in status(runner)["message"]
 
 
+def test_leading_silence_without_the_music_app_is_a_permission_failure(runner):
+    light = FakeLight()
+    code = asyncio.run(runner.run(runner.RunnerConfig(), source=FakeSource([silence(RATE, 15)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 2
+    assert "Screen and System Audio Recording" in status(runner)["message"]
+
+
+def test_stop_during_the_opening_read_closes_the_light(runner):
+    class Slow:
+        def __init__(self):
+            self.closed = False
+            self.state = LightState()
+
+        async def read_status(self):
+            await asyncio.sleep(30)
+
+        async def close(self):
+            self.closed = True
+
+    light = Slow()
+
+    async def go():
+        run = runner._Run(runner.RunnerConfig(record=False), FakeSource([silence(RATE, 1)]),
+                          lambda: light, lambda: None)
+        task = asyncio.create_task(run.main())
+        await asyncio.sleep(0.05)
+        run.stop.set()
+        return await asyncio.wait_for(task, 2)
+
+    assert asyncio.run(go()) == 0 and light.closed
+    assert "before it reached the light" in status(runner)["message"]
+
+
 def test_track_change_jumps_palette_anchor(runner, monkeypatch):
     from amaran_mcp.music import render
     from amaran_mcp.music.applemusic import Track

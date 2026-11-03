@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from contextlib import suppress
 import logging
 import time
 from typing import TypeVar
@@ -39,6 +40,9 @@ SCAN_SECONDS = 120.0
 # by then can hang for its whole timeout (120 s, seen on 2026-10-29) while the next
 # try connects at once, so each try gets this long, then the scan starts again.
 CONNECT_SECONDS = 8.0
+# How long a new connection waits for the Secure Network Beacon before it
+# decides the device did not prove it is on our network.
+BEACON_SECONDS = 3.0
 # Writes go without response, so a disconnect straight after one can drop it:
 # seen on the light, a CLI command that printed ok and never arrived.
 FLUSH_SECONDS = 0.5
@@ -71,6 +75,7 @@ class MeshLink:
         self._lock = asyncio.Lock()
         self._idle_task: asyncio.Task | None = None
         self._beacon = asyncio.Event()
+        self._on_network = False  # this connection's advert carried our network ID
         self._filter_status = asyncio.Event()
         self._rx = bytearray()
         self._waiters: list[tuple[Callable[[DecodedAccessMessage], object], asyncio.Future]] = []
@@ -154,8 +159,17 @@ class MeshLink:
             # The proxy sends a Secure Network Beacon on connect; it carries the
             # current IV index and proves this light is on our network.
             try:
-                await asyncio.wait_for(self._beacon.wait(), 3.0)
+                await asyncio.wait_for(self._beacon.wait(), BEACON_SECONDS)
             except TimeoutError:
+                if not self._on_network:
+                    # A remembered address, or the only Node Identity advert in
+                    # range, is not proof. Sending anyway holds that light's
+                    # one connection and our light never sees the command.
+                    raise LinkError(
+                        "The light did not confirm it is on this network. It may be "
+                        "off, or another mesh light answered."
+                    )
+                self.store.refresh()
                 log.info("no network beacon; using stored IV index %s", self.store.iv_index)
             seq = self.store.reserve(1)[0]
             await self._write(client, build_proxy_filter_pdu(
@@ -191,36 +205,41 @@ class MeshLink:
                 await client.connect(timeout=CONNECT_SECONDS)
                 return client, device
             except (BleakError, TimeoutError) as err:
-                try:
+                with suppress(Exception):
                     await client.disconnect()
-                except Exception:
-                    pass
                 if time.monotonic() + CONNECT_SECONDS > deadline:
                     raise LinkError(
                         f"Found the light but could not connect ({str(err) or 'timed out'}). If the "
                         "amaran app is open and connected to it, close the app and try again."
                     ) from err
                 log.info("could not connect (%s); scanning again", str(err) or "timed out")
+            except BaseException:
+                # A stop during the scan must not leave the connect half open.
+                with suppress(Exception):
+                    await client.disconnect()
+                raise
 
     async def _find(self, timeout: float = SCAN_SECONDS) -> BLEDevice:
         # One scan that stops at the first sign of our light: the device that
         # last passed the beacon check, or a proxy advertising our network ID.
         # The light can go quiet for several seconds after a disconnect.
+        self.store.refresh()
+        self._on_network = False
         network_id = mesh_network_id(self._net_key)
         remembered = self.store.ble_address
         others: dict[str, BLEDevice] = {}
 
         def ours(device: BLEDevice, adv: AdvertisementData) -> bool:
-            if device.address == remembered:
-                return True
             data = adv.service_data.get(PROXY_SERVICE)
-            if data is None:
-                return False
-            if len(data) >= 9 and data[0] == 0x00 and data[1:9] == network_id:
+            if data is not None and len(data) >= 9 and data[0] == 0x00 and data[1:9] == network_id:
+                self._on_network = True
                 return True
-            if data[:1] == b"\x01":
+            if remembered and device.address == remembered:
+                return True
+            if data is not None and data[:1] == b"\x01":
                 # Node Identity: it hides its network, so it may be ours. A proxy
                 # naming a different network is a neighbour's light, never a candidate.
+                # The beacon on connect is what proves it; without one we do not send.
                 others[device.address] = device
             return False
 
@@ -235,7 +254,8 @@ class MeshLink:
             return device
         if len(others) == 1:
             # Some lights advertise Node Identity instead of the network ID; with
-            # one candidate in range, try it. The beacon check confirms it.
+            # one candidate in range, try it. The beacon on connect confirms it.
+            self._on_network = False
             return next(iter(others.values()))
         if not others:
             raise LinkError(

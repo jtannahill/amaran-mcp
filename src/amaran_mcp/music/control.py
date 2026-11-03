@@ -60,16 +60,19 @@ def status() -> dict | None:
         PID_PATH.unlink(missing_ok=True)
         return None
     music = {"running": True, **(runner.status_of() or {}), "pid": pid}
-    if music.get("recording"):
+    # `records` is this run's choice, written before the scan finishes. Without
+    # it, an older file is read the way it always was: a session path means
+    # music mode is recording, and otherwise the listener is.
+    records = music["records"] if "records" in music else None
+    if records is True or (records is None and music.get("recording")):
         music["recorded_by"] = "music mode"
-    else:
-        # Music mode leaves recording to the background listener when it runs; say so.
-        from . import listener
-        background = listener.status()
-        if background:
-            music["recording"] = background.get("recording")
-            music["recording_stopped"] = background.get("recording_stopped")
-            music["recorded_by"] = "background listener"
+        return music
+    from . import listener
+    background = listener.status()
+    if background:
+        music["recording"] = background.get("recording")
+        music["recording_stopped"] = background.get("recording_stopped")
+        music["recorded_by"] = "background listener"
     return music
 
 
@@ -99,6 +102,16 @@ def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, re
     pid = spawn(argv if record else argv + ["--no-record"])
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     PID_PATH.write_text(f"{pid}\n")
+    # Published before the child finishes its scan, so a brightness change uses
+    # this mood and the listener sees who records. The child keeps `records`.
+    _write_private(runner.STATUS_PATH, {
+        "pid": pid,
+        "mood": mood,
+        "state": "starting",
+        "recording": None,
+        "records": record,
+        "restore_failed": False,
+    })
     return {"running": True, "pid": pid, "mood": mood, "recording": recorded_by is not None, "recorded_by": recorded_by}
 
 
@@ -123,9 +136,9 @@ def mark(kind: str, note: str | None = None) -> dict:
 
 
 def stop(timeout: float = 15.0) -> str | None:
-    """Ask music mode to settle the light back and exit. Returns "settled", or "killed"
-    when it did not finish in time (the light may still show its last colour), or None
-    when it was not running."""
+    """Ask music mode to settle the light back and exit. Returns "settled", "failed"
+    when the restore did not reach the light, "killed" when it did not finish in
+    time (the light may still show its last colour), or None when it was not running."""
 
     pid = _pid()
     if pid is None or not (_alive(pid) and _ours(pid)):
@@ -143,6 +156,9 @@ def stop(timeout: float = 15.0) -> str | None:
         except ProcessLookupError:
             pass
         result = "killed"
+    elif (runner.status_of() or {}).get("restore_failed"):
+        # The process exited, but the command that puts the light back failed.
+        result = "failed"
     PID_PATH.unlink(missing_ok=True)
     return result
 

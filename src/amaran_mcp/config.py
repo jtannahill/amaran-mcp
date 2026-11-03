@@ -142,9 +142,25 @@ class StateStore:
             self._catch_up()
             self._write()
 
-    def _catch_up(self) -> None:
-        # Another process may have sent since this one last looked: never go back.
-        self.next_seq = max(self.next_seq, _read(STATE_PATH, {}).get("next_seq", 1))
+    def refresh(self) -> None:
+        """Take a newer IV index or device address another process has stored."""
+
+        with _state_lock():
+            self._catch_up()
+
+    def _catch_up(self, *, keep_address: bool = False) -> None:
+        # Another process may have sent since this one last looked. The sequence
+        # and the IV index only move forward. A reserve must not put this
+        # process's old IV index or BLE address back over a newer beacon.
+        disk = _read(STATE_PATH, {})
+        self.next_seq = max(self.next_seq, disk.get("next_seq", 1))
+        self.iv_index = max(self.iv_index, int(disk.get("iv_index") or 0))
+        disk_addr = disk.get("ble_address")
+        if keep_address:
+            if self.ble_address is None and disk_addr:
+                self.ble_address = disk_addr
+        elif disk_addr:
+            self.ble_address = disk_addr
 
     def _write(self) -> None:
         _write_private(STATE_PATH, {
@@ -166,14 +182,17 @@ class StateStore:
         return range(first, first + count)
 
     def set_iv_index(self, iv_index: int) -> None:
-        if iv_index != self.iv_index:
-            self.iv_index = iv_index
-            self.save()
+        with _state_lock():
+            self._catch_up()
+            if iv_index > self.iv_index:
+                self.iv_index = iv_index
+                self._write()
 
     def remember_device(self, address: str) -> None:
-        if address != self.ble_address:
+        with _state_lock():
             self.ble_address = address
-            self.save()
+            self._catch_up(keep_address=True)
+            self._write()
 
 
 def load_scenes() -> dict[str, dict[str, Any]]:
