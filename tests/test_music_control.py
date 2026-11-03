@@ -81,6 +81,22 @@ class StubLight:
         self.order.append("set_brightness")
 
 
+def test_save_scene_refuses_a_read_the_light_did_not_confirm(control, monkeypatch):
+    from amaran_mcp import server
+
+    class Lamp(StubLight):
+        async def read_status(self):
+            return {"confirmed_by_light": False}
+
+        def save_scene(self, name):
+            raise AssertionError("saved a look the light did not confirm")
+
+    monkeypatch.setattr(control, "status", lambda: None)
+    monkeypatch.setattr(server, "light", lambda: Lamp([]))
+    with pytest.raises(Exception, match="did not answer"):
+        asyncio.run(server.save_scene("interview"))
+
+
 def test_save_scene_stops_music_before_it_reads_the_light(control, monkeypatch):
     from amaran_mcp import server
     order = []

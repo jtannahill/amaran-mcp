@@ -255,7 +255,8 @@ def main() -> None:
             from .music import control
             print({"settled": "stopped",
                    "killed": "stopped (the fade back did not finish)",
-                   "failed": "stopped (the light did not take the restore)"}.get(
+                   "failed": "stopped (the light did not take the restore)",
+                   "unknown": "stopped (the starting colour was not known)"}.get(
                 control.stop(), "music mode was not running"))
         elif args.command == "music-probe":
             _music_probe(float(args.values[0]) if args.values else 10)

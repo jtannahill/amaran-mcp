@@ -112,6 +112,32 @@ def test_leading_silence_without_the_music_app_is_a_permission_failure(runner):
     assert "Screen and System Audio Recording" in status(runner)["message"]
 
 
+def test_an_unknown_starting_colour_is_not_restored_as_white(runner):
+    light = FakeLight(start=LightState(True, None, 40))
+    code = asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=10, record=False),
+                                  source=FakeSource([kick_track(RATE, 8), silence(RATE, 20)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 0
+    assert not any(c[0] == "apply" for c in light.calls)
+    assert light.calls[-1] == ("set_brightness", 40.0)
+    assert status(runner)["restore_unknown"] is True
+
+
+def test_an_unconfirmed_read_is_not_the_scene_we_restore(runner):
+    light = FakeLight(start=LightState(True, "color", 80, hue=20, saturation=90))
+
+    async def unconfirmed():
+        return {"confirmed_by_light": False}
+
+    light.read_status = unconfirmed
+    code = asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=10, record=False),
+                                  source=FakeSource([kick_track(RATE, 8), silence(RATE, 20)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 0
+    assert not any(c[0] == "apply" for c in light.calls)
+    assert status(runner)["restore_unknown"] is True
+
+
 def test_stop_during_the_opening_read_closes_the_light(runner):
     class Slow:
         def __init__(self):

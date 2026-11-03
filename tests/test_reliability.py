@@ -240,6 +240,16 @@ def test_stop_says_settled_when_music_mode_exits(control, monkeypatch):
     assert control.stop(timeout=5) == "settled"
 
 
+def test_stop_says_unknown_when_the_starting_colour_was_not_known(control, monkeypatch):
+    from amaran_mcp.music import runner
+    pid = spawn("import time; time.sleep(30)")
+    control.PID_PATH.parent.mkdir(parents=True, exist_ok=True)
+    control.PID_PATH.write_text(f"{pid}\n")
+    runner.STATUS_PATH.write_text('{"restore_unknown": true}\n')
+    monkeypatch.setattr(control, "_ours", lambda p: True)
+    assert control.stop(timeout=5) == "unknown"
+
+
 def test_stop_says_failed_when_the_restore_did_not_land(control, monkeypatch):
     from amaran_mcp.music import runner
     pid = spawn("import time; time.sleep(30)")

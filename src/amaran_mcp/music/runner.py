@@ -187,6 +187,8 @@ class _Run:
         self._log = open(config.log_features, "a") if config.log_features else None
         self._heard_sound = False  # exact zeros from the start are a missing capture permission
         self.restore_failed = False
+        self.restore_unknown = False  # the colour at the start was never known
+        self._colour_unknown = False
 
     # ── Status ───────────────────────────────────────────────────────────────
 
@@ -207,6 +209,7 @@ class _Run:
             "recording_stopped": self.sessions.stopped if self.sessions else None,
             "records": self.sessions is not None,
             "restore_failed": self.restore_failed,
+            "restore_unknown": self.restore_unknown,
         })
 
     def note_error(self, message: str) -> None:
@@ -243,6 +246,15 @@ class _Run:
 
         start = self.start_state
         steps = max(1, round(self.config.settle_seconds / self._tick_seconds()))
+        if start.mode is None and start.power is not False:
+            # Power and brightness may be known. The colour is not, and a fade
+            # toward white would invent a look the lamp was not showing.
+            self._fade = [("brightness", float(start.brightness))] if start.brightness is not None else []
+            self._colour_unknown = True
+            self.restore_unknown = True
+            self._after_fade = "listening"
+            self.state = "settling"
+            return
         if start.power is not False and start.mode == "color" and start.hue is not None:
             end = Output(start.hue, start.saturation or 0, start.brightness or current.brightness)
         else:
@@ -341,8 +353,16 @@ class _Run:
         return True
 
     async def _capture_start(self, lamp: LightBase) -> None:
-        await lamp.read_status()
+        status = await lamp.read_status()
+        if status.get("confirmed_by_light") is False:
+            # A timed-out read must not become the scene we restore. The cache
+            # is whatever this process last sent, which the lamp may not be showing.
+            self.note_error("could not read the light's starting state")
+            self.start_state = LightState()
+            self._colour_unknown = True
+            return
         self.start_state = replace(lamp.state)
+        self._colour_unknown = self.start_state.mode is None and self.start_state.power is not False
 
     async def _release_light(self) -> None:
         """Close the link after the last command, so that command can leave."""
@@ -440,6 +460,9 @@ class _Run:
                 log.warning("the light stopped taking commands; leaving it as it is")
                 self._fade.clear()
         await self.writer.close()
+        if self.restore_unknown and not self.message:
+            self.message = ("the light's colour when music mode started was not known, "
+                            "so it was left")
         if self.state == "settling":
             self.state = "listening"
         self.write_status()

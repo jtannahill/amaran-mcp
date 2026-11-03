@@ -121,7 +121,7 @@ class LightBase:
 
     def save_scene(self, name: str) -> dict[str, Any]:
         if self.state.mode is None:
-            raise ValueError("Nothing to save yet: set the light or read its status first")
+            raise ValueError("The light's colour is not known, so there is nothing to save")
         scenes = load_scenes()
         scenes[name] = {k: v for k, v in asdict(self.state).items() if v is not None}
         save_scenes(scenes)

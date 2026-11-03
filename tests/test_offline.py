@@ -166,7 +166,11 @@ def test_desktop_backend_against_fake_desktop(home, monkeypatch):
             return status
 
     status = asyncio.run(go())
-    assert (status["kelvin"], status["tint"], status["brightness"], status["power"]) == (3200, 5, 30, True)
+    # Desktop reports power and brightness, not the active mode. The stored
+    # white preset must not be reported as what the lamp is showing.
+    assert status["power"] is True and status["brightness"] == 30
+    assert "kelvin" not in status and "mode" not in status
+    assert "get_cct" not in {m["action"] for m in seen}
     set_cct = next(m for m in seen if m["action"] == "set_cct")
     assert set_cct["node_id"] == "400H5-000001"
     assert set_cct["args"] == {"cct": 5600, "intensity": 400, "gm": 70}

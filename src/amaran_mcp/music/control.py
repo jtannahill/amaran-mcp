@@ -111,6 +111,7 @@ def start(mood: str = "ethereal", spawn: Callable[[list[str]], int] = _spawn, re
         "recording": None,
         "records": record,
         "restore_failed": False,
+        "restore_unknown": False,
     })
     return {"running": True, "pid": pid, "mood": mood, "recording": recorded_by is not None, "recorded_by": recorded_by}
 
@@ -136,9 +137,10 @@ def mark(kind: str, note: str | None = None) -> dict:
 
 
 def stop(timeout: float = 15.0) -> str | None:
-    """Ask music mode to settle the light back and exit. Returns "settled", "failed"
-    when the restore did not reach the light, "killed" when it did not finish in
-    time (the light may still show its last colour), or None when it was not running."""
+    """Ask music mode to settle the light back and exit. Returns "settled", "unknown"
+    when the starting colour was never known, "failed" when the restore did not
+    reach the light, "killed" when it did not finish in time, or None when it
+    was not running."""
 
     pid = _pid()
     if pid is None or not (_alive(pid) and _ours(pid)):
@@ -156,9 +158,13 @@ def stop(timeout: float = 15.0) -> str | None:
         except ProcessLookupError:
             pass
         result = "killed"
-    elif (runner.status_of() or {}).get("restore_failed"):
-        # The process exited, but the command that puts the light back failed.
-        result = "failed"
+    else:
+        report = runner.status_of() or {}
+        if report.get("restore_failed"):
+            # The process exited, but the command that puts the light back failed.
+            result = "failed"
+        elif report.get("restore_unknown"):
+            result = "unknown"
     PID_PATH.unlink(missing_ok=True)
     return result
 

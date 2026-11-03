@@ -192,7 +192,9 @@ async def save_scene(name: str) -> dict[str, Any]:
 
     await take_over()
     lamp = await _lamp()
-    await lamp.read_status()
+    status = await lamp.read_status()
+    if status.get("confirmed_by_light") is False:
+        raise ValueError("The light did not answer, so its look was not saved")
     return lamp.save_scene(name)
 
 
@@ -231,6 +233,9 @@ async def stop_music_mode() -> str:
     if result == "failed":
         return ("music mode stopped, but the light did not take the restore, "
                 "so it may still show its last colour")
+    if result == "unknown":
+        return ("music mode stopped. The colour it started from was not known, "
+                "so the light was left as the music left it")
     return "music mode was not running"
 
 
