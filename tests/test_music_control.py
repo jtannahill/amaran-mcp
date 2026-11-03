@@ -47,6 +47,18 @@ def test_unknown_mood_lists_moods(control):
         control.start("disco", spawn=lambda argv: 1)
 
 
+def test_start_publishes_the_new_mood_before_the_child_scans(control, monkeypatch):
+    from amaran_mcp.music.moods import MOODS
+    monkeypatch.setattr(control, "_alive", lambda pid: True)
+    monkeypatch.setattr(control, "_ours", lambda pid: True)
+    control.start("dawn", spawn=lambda argv: 7)
+    music = control.status()
+    assert music["mood"] == "dawn" and music["records"] is True and music["recording"] is None
+    assert music["recorded_by"] == "music mode"
+    low, high = MOODS["dawn"].brightness
+    assert control.set_brightness(50) == pytest.approx(50 - (low + high) / 2)
+
+
 def test_set_brightness_writes_offset_from_mood_midpoint(control, monkeypatch):
     from amaran_mcp.music import runner
     monkeypatch.setattr(control, "status", lambda: {"running": True, "mood": "ethereal"})
@@ -67,6 +79,42 @@ class StubLight:
 
     async def set_brightness(self, percent):
         self.order.append("set_brightness")
+
+
+def test_save_scene_refuses_a_read_the_light_did_not_confirm(control, monkeypatch):
+    from amaran_mcp import server
+
+    class Lamp(StubLight):
+        async def read_status(self):
+            return {"confirmed_by_light": False}
+
+        def save_scene(self, name):
+            raise AssertionError("saved a look the light did not confirm")
+
+    monkeypatch.setattr(control, "status", lambda: None)
+    monkeypatch.setattr(server, "light", lambda: Lamp([]))
+    with pytest.raises(Exception, match="did not answer"):
+        asyncio.run(server.save_scene("interview"))
+
+
+def test_save_scene_stops_music_before_it_reads_the_light(control, monkeypatch):
+    from amaran_mcp import server
+    order = []
+
+    class Lamp(StubLight):
+        async def read_status(self):
+            self.order.append("read")
+            return {}
+
+        def save_scene(self, name):
+            self.order.append(("save", name))
+            return {"name": name}
+
+    monkeypatch.setattr(control, "status", lambda: {"running": True, "state": "playing", "mood": "ethereal"})
+    monkeypatch.setattr(control, "stop", lambda timeout=8.0: order.append("stop") or True)
+    monkeypatch.setattr(server, "light", lambda: Lamp(order))
+    asyncio.run(server.save_scene("interview"))
+    assert order == ["stop", "read", ("save", "interview")]
 
 
 def test_set_white_stops_music_first(control, monkeypatch):

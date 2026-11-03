@@ -193,11 +193,13 @@ class DesktopLight(LightBase):
         s = self.state
         s.power = not await self._call("get_sleep")
         s.brightness = round((await self._call("get_intensity")) / 10)
-        if s.mode in (None, "white"):
+        # The API does not say which mode is showing. Filling that in as white
+        # makes music mode "restore" the stored preset over a colour the lamp
+        # was actually on. Only refresh the mode this process already set.
+        if s.mode == "white":
             cct = await self._call("get_cct")
             s.kelvin = cct.get("cct")
             s.tint = round((cct.get("gm", 100) - 100) / GM_STEP)
-            s.mode = s.mode or "white"
         elif s.mode == "color":
             hsi = await self._call("get_hsi")
             s.hue, s.saturation = hsi.get("hue"), hsi.get("sat")

@@ -20,6 +20,14 @@ def test_vector_has_one_value_per_feature_in_order():
     assert v[sections.FEATURES.index("tension")] == 0.4
 
 
+def test_full_scale_is_not_stored_as_silence():
+    loud = sections.vector(make_features(level_db=0.0))
+    missing = sections.vector(make_features(level_db=None))
+    level = sections.FEATURES.index("level")
+    assert loud[level] == 0.0
+    assert missing[level] == -1.0
+
+
 def test_window_is_causal_and_documented_length():
     seq = np.arange(30 * sections.ROW_WIDTH, dtype=float).reshape(30, sections.ROW_WIDTH)
     w = sections.window(seq, 20)

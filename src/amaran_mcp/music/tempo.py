@@ -207,8 +207,10 @@ class TempoTracker:
     def _report(self, dt: float) -> Beat:
         kick, strength = self._kick(dt)
         jump = self._jump()
-        if self._period is None or self.confidence < CONFIDENT:
+        if self._period is None:
             return Beat(None, self.confidence, False, False, None, None, kick, strength, jump)
+        # Confidence falls when the kick goes smooth, as in a breakdown. The
+        # period we locked stays, so the bar grid does not disappear with it.
         index = self._beat_index(self.now)
         bar = phrase = False
         while self._beats_reported < index:

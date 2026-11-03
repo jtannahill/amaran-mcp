@@ -38,6 +38,17 @@ def test_no_kick_means_no_tempo():
     assert feed_in_blocks(TempoTracker(RATE), pads_only(RATE, 20))[-1].bpm is None
 
 
+def test_a_locked_tempo_stays_published_when_confidence_falls():
+    """A breakdown drops confidence. The bar grid stays on the period already locked."""
+    tracker = TempoTracker(RATE)
+    beats = feed_in_blocks(tracker, kick_track(RATE, 30, bpm=138))
+    assert beats[-1].bpm == pytest.approx(138, abs=1)
+    tracker.confidence = 0.0
+    beat = tracker._report(1024 / RATE)
+    assert beat.bpm == pytest.approx(138, abs=1)
+    assert beat.seconds_to_bar is not None and beat.confidence == 0.0
+
+
 def test_clashing_blend_stays_within_its_tempos():
     """Two unmatched tempos at once (rare: DJs beatmatch): the reading stays
     within the blend's range, so colour moves still land near the bars."""

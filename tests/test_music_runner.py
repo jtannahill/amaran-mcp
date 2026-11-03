@@ -104,6 +104,66 @@ def test_zeros_while_music_app_playing_exits_with_permission_message(runner):
     assert "Screen and System Audio Recording" in status(runner)["message"]
 
 
+def test_leading_silence_without_the_music_app_is_a_permission_failure(runner):
+    light = FakeLight()
+    code = asyncio.run(runner.run(runner.RunnerConfig(), source=FakeSource([silence(RATE, 15)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 2
+    assert "Screen and System Audio Recording" in status(runner)["message"]
+
+
+def test_an_unknown_starting_colour_is_not_restored_as_white(runner):
+    light = FakeLight(start=LightState(True, None, 40))
+    code = asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=10, record=False),
+                                  source=FakeSource([kick_track(RATE, 8), silence(RATE, 20)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 0
+    assert not any(c[0] == "apply" for c in light.calls)
+    assert light.calls[-1] == ("set_brightness", 40.0)
+    assert status(runner)["restore_unknown"] is True
+
+
+def test_an_unconfirmed_read_is_not_the_scene_we_restore(runner):
+    light = FakeLight(start=LightState(True, "color", 80, hue=20, saturation=90))
+
+    async def unconfirmed():
+        return {"confirmed_by_light": False}
+
+    light.read_status = unconfirmed
+    code = asyncio.run(runner.run(runner.RunnerConfig(silence_exit_seconds=10, record=False),
+                                  source=FakeSource([kick_track(RATE, 8), silence(RATE, 20)]),
+                                  light=lambda: light, music=lambda: None))
+    assert code == 0
+    assert not any(c[0] == "apply" for c in light.calls)
+    assert status(runner)["restore_unknown"] is True
+
+
+def test_stop_during_the_opening_read_closes_the_light(runner):
+    class Slow:
+        def __init__(self):
+            self.closed = False
+            self.state = LightState()
+
+        async def read_status(self):
+            await asyncio.sleep(30)
+
+        async def close(self):
+            self.closed = True
+
+    light = Slow()
+
+    async def go():
+        run = runner._Run(runner.RunnerConfig(record=False), FakeSource([silence(RATE, 1)]),
+                          lambda: light, lambda: None)
+        task = asyncio.create_task(run.main())
+        await asyncio.sleep(0.05)
+        run.stop.set()
+        return await asyncio.wait_for(task, 2)
+
+    assert asyncio.run(go()) == 0 and light.closed
+    assert "before it reached the light" in status(runner)["message"]
+
+
 def test_track_change_jumps_palette_anchor(runner, monkeypatch):
     from amaran_mcp.music import render
     from amaran_mcp.music.applemusic import Track

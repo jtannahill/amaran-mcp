@@ -16,6 +16,7 @@ from .desktop import DesktopLight, desktop_running
 from .light import AmaranLight, LightBase
 
 _lights: dict[str, LightBase] = {}
+_retired: list[LightBase] = []  # a transport this process stopped using, not yet closed
 PROBE_SECONDS = 5.0  # music mode asks many times a second; Desktop is not opened that often
 _probe: tuple[float, bool] | None = None  # (when, whether Desktop was running)
 
@@ -39,6 +40,10 @@ def choose() -> str:
 
 def current_light() -> LightBase:
     backend = choose()
+    # The light takes one connection. A Bluetooth link left open after Desktop
+    # starts keeps the radio, and Desktop's commands never arrive.
+    for name in [name for name in _lights if name != backend]:
+        _retired.append(_lights.pop(name))
     if backend not in _lights:
         if backend == "desktop":
             # Desktop knows its lights; the imported config only picks one of several.
@@ -48,7 +53,15 @@ def current_light() -> LightBase:
     return _lights[backend]
 
 
+async def release_idle_backends() -> None:
+    """Close a transport this process stopped using, so it lets go of the light."""
+
+    while _retired:
+        await _retired.pop().close()
+
+
 async def close_all() -> None:
+    await release_idle_backends()
     for light in _lights.values():
         await light.close()
     _lights.clear()

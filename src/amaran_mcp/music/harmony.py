@@ -123,12 +123,23 @@ class HarmonyTracker:
             return False, False
         previous, self._current, self._candidate = self._current, label, None
         self._history.append((self._now, 1.0 if label[1] else -1.0))
+        return True, self._lift_on_change(previous, label)
+
+    def _lift_on_change(self, previous: tuple[int, bool] | None, label: tuple[int, bool]) -> bool:
+        """A minor-to-major change, or the balance rising, once per few seconds.
+
+        _balance_lift stamps the debounce when it fires. Checking the debounce
+        again after that call would cancel the lift it just found.
+        """
+
+        if self._now - self._last_lift < LIFT_DEBOUNCE:
+            return False
         # Minor to major is a lift; major to major (Ab to Gb) is just movement.
         onto_major = previous is not None and not previous[1] and label[1]
-        lift = (onto_major or self._balance_lift()) and self._now - self._last_lift >= LIFT_DEBOUNCE
-        if lift:
+        if onto_major:
             self._last_lift = self._now
-        return True, lift
+            return True
+        return self._balance_lift()
 
     def _balance(self) -> float:
         while self._history and self._history[0][0] < self._now - BALANCE_SECONDS:

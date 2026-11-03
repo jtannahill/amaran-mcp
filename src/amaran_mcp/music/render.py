@@ -177,9 +177,11 @@ class Renderer:
         if self._chord is None:
             self._chord, self._next_chord = colour, None
         elif colour != self._chord and colour != self._next_chord:
-            # A new chord: its wash starts on the next bar (now, without tempo).
+            # A new chord: its wash starts on the next bar. With no grid yet,
+            # wait one bar rather than applying the colour on this tick.
             self._next_chord = colour
-            self._next_chord_at = self._now + (f.beat.seconds_to_bar or 0.0)
+            wait = f.beat.seconds_to_bar if f.beat.seconds_to_bar is not None else bar
+            self._next_chord_at = self._now + wait
         if self._next_chord is not None and self._now >= self._next_chord_at:
             self._chord, self._next_chord = self._next_chord, None
         return self._chord

@@ -54,6 +54,9 @@ def vector(features: Any) -> np.ndarray:
 
     f = asdict(features) if is_dataclass(features) else features
     beat, harmony, timbre = f["beat"], f["harmony"], f["timbre"]
+    level_db = timbre.get("level_db")
+    # 0 dBFS is a real level. `or -120` would store a full-scale block as silence.
+    level = -120.0 if level_db is None else level_db
     return np.array([
         f["energy"],
         f["bass"],
@@ -69,7 +72,7 @@ def vector(features: Any) -> np.ndarray:
         timbre["vocal"],
         timbre.get("singing") or 0.0,
         timbre.get("speech") or 0.0,
-        max(-1.0, min(0.0, (timbre.get("level_db") or -120.0) / 60)),
+        max(-1.0, min(0.0, level / 60)),
     ], dtype=np.float32)
 
 
